@@ -49,7 +49,9 @@ jobs:
           
         # Send APK
         curl -v -F document=@"$APK_PATH" \
-          "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_TO }}&caption=Bijoy Self Care Debug APK"
+          -F "chat_id=${{ secrets.TELEGRAM_TO }}" \
+          -F "caption=Bijoy Self Care Debug APK" \
+          "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendDocument"
 
     - name: Notify Telegram (Failure)
       if: failure()
