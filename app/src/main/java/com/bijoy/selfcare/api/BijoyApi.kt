@@ -104,7 +104,6 @@ class BijoyApi {
             client.newCall(Request.Builder().url("https://selfcare.bijoy.net/du_graph_ajax?type=2").header("User-Agent", userAgent).header("X-Requested-With", "XMLHttpRequest").build()).execute().close()
 
             val doc = Jsoup.parse(dashBody)
-            
             val name = doc.select("aside h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             val pkg = doc.select("h1 span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
             
@@ -117,7 +116,6 @@ class BijoyApi {
             val accStatus = getCardValue("Account Status")
             val connStatusRaw = getCardValue("Connection Status")
             val connStatus = if (connStatusRaw.contains("ONLINE", true)) "ONLINE" else if (connStatusRaw.contains("OFFLINE", true)) "OFFLINE" else connStatusRaw
-            
             val expiry = getCardValue("Expiry Date")
             val rate = getCardValue("Plan rate")
 
@@ -132,7 +130,8 @@ class BijoyApi {
             .readTimeout(0, TimeUnit.SECONDS)
             .build()
             
-        val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
+        // Enhanced Regex to handle scientific notation (e.g. 1.31718E7)
+        val regex = Regex("""([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?),([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)""")
         
         while (true) {
             try {
@@ -156,9 +155,9 @@ class BijoyApi {
                         if (matches.isNotEmpty()) {
                             val last = matches.last()
                             
-                            // SWAPPED: Site JS says rx (val[0]) is Upload, tx (val[1]) is Download
-                            val rx_upload = last.groupValues[1].toDouble()
-                            val tx_download = last.groupValues[2].toDouble()
+                            // Site JS: rx (val[0]) is Upload, tx (val[1]) is Download
+                            val rx_upload = last.groupValues[1].toDoubleOrNull() ?: 0.0
+                            val tx_download = last.groupValues[2].toDoubleOrNull() ?: 0.0
                             
                             emit(LiveSpeed(
                                 download = tx_download / 1000.0,
