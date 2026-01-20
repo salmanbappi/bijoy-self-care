@@ -101,17 +101,19 @@ class BijoyApi {
 
             val doc = Jsoup.parse(dashBody)
             
-            // Refined extraction
-            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: doc.select("h2").firstOrNull()?.text()?.trim() ?: "User"
+            // Name: Bappy Shikder
+            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             
-            // Look for the specific span with Mbps. Using broader search if specific fail.
-            var pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: ""
-            if (pkg.isEmpty()) {
-                pkg = doc.select("p:contains(Current package)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "Unknown Package"
-            }
+            // Package: 25 Mbps
+            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "Unknown Package"
             
-            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("p, font, span")?.lastOrNull()?.text()?.trim() ?: "N/A"
-            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.select("p, span")?.lastOrNull()?.text()?.trim() ?: "N/A"
+            // Status Cards - using more direct traversal
+            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
+            
+            // Connection Status: contains a span with ONLINE
+            val connStatusP = doc.select("span:contains(Connection Status)").firstOrNull()?.nextElementSibling()
+            val connStatus = connStatusP?.select("span")?.firstOrNull()?.text()?.trim() ?: connStatusP?.text()?.trim() ?: "N/A"
+            
             val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
             val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
 
@@ -125,23 +127,23 @@ class BijoyApi {
 
     suspend fun getLiveSpeed(): LiveSpeed = withContext(Dispatchers.IO) {
         try {
-            // Use a short timeout for live speed to avoid blocking the UI loop
-            val liveClient = client.newBuilder()
-                .readTimeout(2, TimeUnit.SECONDS)
-                .build()
-                
+            // Speed server sends a stream. We open it, read the current chunk, and close.
             val request = Request.Builder()
                 .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "https://selfcare.bijoy.net/customer/dashboard")
                 .build()
             
-            val response = liveClient.newCall(request).execute()
+            val response = client.newCall(request).execute()
             val source = response.body?.source() ?: return@withContext LiveSpeed(0.0, 0.0)
             
-            // Read only a small portion of the stream (last 1024 bytes) if available, 
-            // but since it's a stream, we just read what's currently buffered.
-            val body = source.readUtf8()
+            // We only need the latest data point. 
+            // Instead of readUtf8() which waits for EOF, we read whatever is in the first buffer.
+            val body = if (source.request(2048)) {
+                source.buffer.clone().readUtf8()
+            } else {
+                source.readUtf8()
+            }
             response.close()
             
             val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
@@ -150,13 +152,7 @@ class BijoyApi {
                 val last = matches.last()
                 val rx = last.groupValues[1].toDouble()
                 val tx = last.groupValues[2].toDouble()
-                
-                // Convert bps to Kbps
-                return@withContext LiveSpeed(
-                    download = rx / 1000.0,
-                    upload = tx / 1000.0,
-                    unit = "Kbps"
-                )
+                return@withContext LiveSpeed(rx / 1000.0, tx / 1000.0)
             }
             return@withContext LiveSpeed(0.0, 0.0)
         } catch (e: Exception) {

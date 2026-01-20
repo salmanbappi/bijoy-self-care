@@ -155,11 +155,9 @@ fun DashboardScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
             Text("Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
             
-            // Live Speed Card
             LiveSpeedCard(api)
             Spacer(Modifier.height(16.dp))
             
-            // User Card
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Welcome, ${data.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -169,7 +167,6 @@ fun DashboardScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             
-            // Detail Cards
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InfoCardCompact("Expiry", data.expiryDate, Modifier.weight(1f))
                 InfoCardCompact("Plan Rate", data.planRate, Modifier.weight(1f))
@@ -190,14 +187,14 @@ fun LiveSpeedCard(api: BijoyApi) {
             val newSpeed = api.getLiveSpeed()
             speed = newSpeed
             history.add(newSpeed)
-            if (history.size > 20) history.removeAt(0)
-            delay(2000)
+            if (history.size > 30) history.removeAt(0)
+            delay(3000)
         }
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Live Speed", style = MaterialTheme.typography.titleSmall)
+            Text("Real-Time Speed", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 SpeedIndicator("Download", speed.download, Color(0xFF4CAF50))
@@ -219,10 +216,10 @@ fun SpeedIndicator(label: String, value: Double, color: Color) {
 
 @Composable
 fun RealTimeChart(history: List<LiveSpeed>) {
-    Canvas(Modifier.fillMaxWidth().height(100.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
         if (history.size < 2) return@Canvas
         val maxVal = history.maxOf { it.download.coerceAtLeast(it.upload) }.coerceAtLeast(100.0)
-        val stepX = size.width / 19f
+        val stepX = size.width / 29f
         val scaleY = size.height / maxVal.toFloat()
 
         val downPath = Path()
@@ -267,7 +264,7 @@ fun UsageScreen(api: BijoyApi) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Daily Usage", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Usage Reports", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         if (isLoading) CircularProgressIndicator()
         else {
@@ -295,7 +292,7 @@ fun PaymentScreen(api: BijoyApi) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Payment History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Billing History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         if (isLoading) CircularProgressIndicator()
         else {
@@ -319,9 +316,7 @@ fun PaymentScreen(api: BijoyApi) {
 @Composable
 fun SupportScreen(onLogout: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Support & Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Open Support Ticket") }
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("View Reports") }
+        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.weight(1f))
         Button(onClick = onLogout, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
             Text("Logout")
