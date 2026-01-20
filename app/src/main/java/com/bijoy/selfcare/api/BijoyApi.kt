@@ -59,18 +59,11 @@ class BijoyApi {
             for (cookie in cookies) {
                 if (cookie.value.equals("deleteMe", true)) continue
                 val index = existingCookies.indexOfFirst { it.name == cookie.name }
-                if (index != -1) {
-                    existingCookies[index] = cookie
-                } else {
-                    existingCookies.add(cookie)
-                }
+                if (index != -1) existingCookies[index] = cookie else existingCookies.add(cookie)
             }
             cookieStore[url.host] = existingCookies
         }
-
-        override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            return cookieStore[url.host] ?: ArrayList()
-        }
+        override fun loadForRequest(url: HttpUrl): List<Cookie> = cookieStore[url.host] ?: ArrayList()
     }
 
     private val client = OkHttpClient.Builder()
@@ -85,99 +78,60 @@ class BijoyApi {
 
     suspend fun login(username: String, pass: String): LoginResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Initial GET to set cookies
-            val initRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/")
-                .header("User-Agent", userAgent)
-                .build()
-            client.newCall(initRequest).execute().close()
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/").header("User-Agent", userAgent).build()).execute().close()
 
-            // 2. POST Login with all required headers
-            val formBody = FormBody.Builder()
-                .add("USERNAME", username)
-                .add("PASS", pass)
-                .build()
-
+            val formBody = FormBody.Builder().add("USERNAME", username).add("PASS", pass).build()
             val loginRequest = Request.Builder()
                 .url("https://selfcare.bijoy.net/customer/login")
                 .post(formBody)
                 .header("Referer", "https://selfcare.bijoy.net/customer/")
                 .header("Origin", "https://selfcare.bijoy.net")
                 .header("User-Agent", userAgent)
-                .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
-
             client.newCall(loginRequest).execute().close()
 
-            // 3. Get Dashboard and verify session
-            val dashboardRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/dashboard")
-                .header("User-Agent", userAgent)
-                .build()
-                
-            val dashResponse = client.newCall(dashboardRequest).execute()
+            val dashResponse = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/dashboard").header("User-Agent", userAgent).build()).execute()
             val dashBody = dashResponse.body?.string() ?: ""
             val dashUrl = dashResponse.request.url.toString()
             dashResponse.close()
 
-            if (dashUrl.contains("/login") || dashBody.contains("Sign in") || dashBody.contains("customerData")) {
-                return@withContext LoginResult.Error("Login failed: Invalid credentials or session rejected.")
+            if (dashUrl.contains("/login") || dashBody.contains("Sign in")) {
+                return@withContext LoginResult.Error("Login failed")
             }
 
-            // 4. Initialize Speed Session (Required by server)
-            val initSpeedRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/du_graph_ajax?type=2")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("User-Agent", userAgent)
-                .build()
-            client.newCall(initSpeedRequest).execute().close()
+            // Initialize graph session
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/report").header("User-Agent", userAgent).build()).execute().close()
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/du_graph_ajax?type=2").header("User-Agent", userAgent).header("X-Requested-With", "XMLHttpRequest").build()).execute().close()
 
-            // 5. Parse Dashboard Data
             val doc = Jsoup.parse(dashBody)
             
-            // Name: Using exact ID or very specific path
-            // The name is in the sidebar user info section
-            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
+            // Precise extraction
+            val name = doc.select("aside h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
+            val pkg = doc.select("h1 span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
             
-            // Package: Inside span with specific color class or containing Mbps
-            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
-            
-            // Stats: Targeting the cards in the main grid
-            fun extractCardValue(label: String): String {
-                val labelSpan = doc.select("span:contains($label)").firstOrNull()
-                return labelSpan?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            fun getCardValue(labelText: String): String {
+                val label = doc.select("span:contains($labelText)").firstOrNull() ?: return "N/A"
+                val p = label.parent()?.select("p")?.firstOrNull() ?: return "N/A"
+                // Clean text from internal spans/fonts
+                return p.text().trim()
             }
 
-            val accStatus = extractCardValue("Account Status")
+            val accStatus = getCardValue("Account Status")
+            val connStatusRaw = getCardValue("Connection Status")
+            val connStatus = if (connStatusRaw.contains("ONLINE", true)) "ONLINE" else if (connStatusRaw.contains("OFFLINE", true)) "OFFLINE" else connStatusRaw
             
-            // Connection Status usually has a span inside the p
-            val connStatusLabel = doc.select("span:contains(Connection Status)").firstOrNull()
-            val connStatus = connStatusLabel?.parent()?.select("p span")?.firstOrNull()?.text()?.trim() 
-                ?: connStatusLabel?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
-            
-            val expiry = extractCardValue("Expiry Date")
-            val rate = extractCardValue("Plan rate")
+            val expiry = getCardValue("Expiry Date")
+            val rate = getCardValue("Plan rate")
 
-            return@withContext LoginResult.Success(
-                DashboardData(
-                    name = name,
-                    packageInfo = pkg,
-                    accountStatus = accStatus,
-                    connectionStatus = connStatus,
-                    expiryDate = expiry,
-                    planRate = rate
-                )
-            )
-
+            return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate))
         } catch (e: Exception) {
-            Log.e("BijoyApi", "Login Error", e)
-            return@withContext LoginResult.Error(e.message ?: "Network error occurred.")
+            return@withContext LoginResult.Error(e.message ?: "Error")
         }
     }
 
     fun getSpeedFlow(): Flow<LiveSpeed> = flow {
         val speedClient = client.newBuilder()
-            .readTimeout(0, TimeUnit.SECONDS) // Keep connection open
+            .readTimeout(0, TimeUnit.SECONDS)
             .build()
             
         val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
@@ -193,65 +147,56 @@ class BijoyApi {
 
                 speedClient.newCall(request).execute().use { response ->
                     val source = response.body?.source() ?: return@use
-                    var lastData = ""
                     
-                    // The server sends a continuous stream of "RX,TX" pairs
+                    // The server keeps adding to the same stream
+                    // We must read only what's new.
                     while (!source.exhausted()) {
-                        // Read what's currently available in the buffer
-                        val currentBuffer = source.buffer.clone().readUtf8()
+                        // Wait for data to arrive in the buffer
+                        if (source.buffer.size == 0L) {
+                            source.request(1)
+                        }
                         
-                        // We only care about the very last complete pair
-                        val matches = regex.findAll(currentBuffer).toList()
+                        // Read the entire current buffer content
+                        val data = source.buffer.readUtf8()
+                        
+                        // Parse all pairs in this chunk and emit the last one
+                        val matches = regex.findAll(data).toList()
                         if (matches.isNotEmpty()) {
                             val last = matches.last()
                             val rx = last.groupValues[1].toDouble()
                             val tx = last.groupValues[2].toDouble()
-                            
-                            // Emit speed in Kbps (assuming raw values are bps)
                             emit(LiveSpeed(rx / 1000.0, tx / 1000.0))
                         }
                         
-                        delay(2000) // Poll the buffer every 2 seconds
-                        source.request(1) // Block until more data is available
+                        delay(1500) // Match the website's visual refresh rate
                     }
                 }
             } catch (e: Exception) {
-                Log.e("BijoyApi", "Speed Stream Error", e)
-                delay(5000) // Retry after 5 seconds
+                Log.e("BijoyApi", "Speed error", e)
+                delay(3000)
             }
         }
     }.flowOn(Dispatchers.IO)
 
     suspend fun getUsageGraph(): List<UsageData> = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/totalUsage")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("User-Agent", userAgent)
-                .build()
-            val response = client.newCall(request).execute()
-            val jsonObject = JSONObject(response.body?.string() ?: "")
+            val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/totalUsage").header("X-Requested-With", "XMLHttpRequest").header("User-Agent", userAgent).build()).execute()
+            val json = JSONObject(response.body?.string() ?: "")
             response.close()
-            val valuesArray = jsonObject.getJSONArray("value")
-            val usageList = ArrayList<UsageData>()
-            for (i in 0 until valuesArray.length()) {
-                val innerObj = JSONObject(valuesArray.getString(i))
-                usageList.add(UsageData(innerObj.getString("date"), innerObj.getLong("download"), innerObj.getLong("upload")))
+            val array = json.getJSONArray("value")
+            (0 until array.length()).map { i ->
+                val obj = JSONObject(array.getString(i))
+                UsageData(obj.getString("date"), obj.getLong("download"), obj.getLong("upload"))
             }
-            return@withContext usageList
         } catch (e: Exception) { emptyList() }
     }
 
     suspend fun getPaymentHistory(): List<PaymentHistoryItem> = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/customerhistory")
-                .header("User-Agent", userAgent)
-                .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/customerhistory").header("User-Agent", userAgent).build()).execute()
             val doc = Jsoup.parse(response.body?.string() ?: "")
             response.close()
-            return@withContext doc.select("table tbody tr").map { row ->
+            doc.select("table tbody tr").map { row ->
                 val cols = row.select("td")
                 PaymentHistoryItem(cols[0].text(), cols[1].text(), cols[2].text(), cols[3].text())
             }
