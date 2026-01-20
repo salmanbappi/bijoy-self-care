@@ -127,7 +127,7 @@ class BijoyApi {
             val doc = Jsoup.parse(dashBody)
             
             val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
-            val pkg = doc.select("span.bg-\[\\#7674F8\]").text().trim()
+            val pkg = doc.select("span.bg-\\[#7674F8\\]").text().trim()
             val accStatusLabel = doc.select("span:contains(Account Status)").first()
             val accStatus = accStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
             val connStatusLabel = doc.select("span:contains(Connection Status)").first()
