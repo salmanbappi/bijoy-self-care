@@ -32,3 +32,33 @@ jobs:
       with:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
+
+    - name: Notify Telegram (Success)
+      if: success()
+      run: |
+        APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+        MESSAGE="✅ *Build Success* for \`Bijoy Self Care\`
+        Commit: \`${{ github.event.head_commit.message }}\`
+        [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        
+        # Send message
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+          -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+          -d "text=$MESSAGE" \
+          -d "parse_mode=markdown"
+          
+        # Send APK
+        curl -v -F document=@"$APK_PATH" \
+          "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_TO }}&caption=Bijoy Self Care Debug APK"
+
+    - name: Notify Telegram (Failure)
+      if: failure()
+      run: |
+        MESSAGE="❌ *Build Failed* for \`Bijoy Self Care\`
+        Commit: \`${{ github.event.head_commit.message }}\`
+        [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+          -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+          -d "text=$MESSAGE" \
+          -d "parse_mode=markdown"
