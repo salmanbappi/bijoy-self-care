@@ -18,6 +18,8 @@ data class DashboardData(
     val packageInfo: String,
     val accountStatus: String,
     val connectionStatus: String,
+    val expiryDate: String,
+    val planRate: String,
     val balance: String = "N/A"
 )
 
@@ -25,6 +27,11 @@ data class UsageData(
     val date: String,
     val download: Long,
     val upload: Long
+)
+
+data class LiveSpeed(
+    val download: Double,
+    val upload: Double
 )
 
 data class PaymentHistoryItem(
@@ -73,7 +80,7 @@ class BijoyApi {
 
     private val client = OkHttpClient.Builder()
         .cookieJar(cookieJar)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.NONE })
         .followRedirects(true)
         .followSslRedirects(true)
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -82,69 +89,84 @@ class BijoyApi {
 
     suspend fun login(username: String, pass: String): LoginResult = withContext(Dispatchers.IO) {
         try {
-            // 1. Initial GET to set cookies
-            val initRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/")
-                .build()
-            
+            val initRequest = Request.Builder().url("https://selfcare.bijoy.net/customer/").build()
             client.newCall(initRequest).execute().close()
 
-            // 2. POST Login
-            val formBody = FormBody.Builder()
-                .add("USERNAME", username)
-                .add("PASS", pass)
-                .build()
-
+            val formBody = FormBody.Builder().add("USERNAME", username).add("PASS", pass).build()
             val loginRequest = Request.Builder()
                 .url("https://selfcare.bijoy.net/customer/login")
                 .post(formBody)
                 .header("Referer", "https://selfcare.bijoy.net/customer/")
                 .header("Origin", "https://selfcare.bijoy.net")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 .build()
 
-            val response = client.newCall(loginRequest).execute()
-            response.close()
+            client.newCall(loginRequest).execute().close()
 
-            // 3. Check Dashboard
-            val dashboardRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/dashboard")
-                .header("Referer", "https://selfcare.bijoy.net/customer/login")
-                .build()
-                
+            val dashboardRequest = Request.Builder().url("https://selfcare.bijoy.net/customer/dashboard").build()
             val dashResponse = client.newCall(dashboardRequest).execute()
             val dashBody = dashResponse.body?.string() ?: ""
             val dashUrl = dashResponse.request.url.toString()
             dashResponse.close()
 
-            // If redirected back to login or root, it failed
-            if (dashUrl.contains("/customer/login") || dashUrl.endsWith("/customer/") || dashBody.contains("Sign in")) {
-                return@withContext LoginResult.Error("Login failed: Invalid credentials or session expired.")
+            if (dashUrl.contains("/login") || dashBody.contains("Sign in")) {
+                return@withContext LoginResult.Error("Login failed")
             }
 
-            // 4. Parse Dashboard Data
             val doc = Jsoup.parse(dashBody)
-            
             val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
-            val pkg = doc.select("span.bg-\\[#7674F8\\]").text().trim()
-            val accStatusLabel = doc.select("span:contains(Account Status)").first()
-            val accStatus = accStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
-            val connStatusLabel = doc.select("span:contains(Connection Status)").first()
-            val connStatus = connStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
+            
+            // Package: Look for "Mbps" text
+            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "Unknown"
+            
+            // Cards extraction
+            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
+            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
+            val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
+            val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
 
             return@withContext LoginResult.Success(
                 DashboardData(
                     name = name,
                     packageInfo = pkg,
                     accountStatus = accStatus,
-                    connectionStatus = connStatus
+                    connectionStatus = connStatus,
+                    expiryDate = expiry,
+                    planRate = rate
                 )
             )
-
         } catch (e: Exception) {
-            e.printStackTrace()
-            return@withContext LoginResult.Error(e.message ?: "Unknown error")
+            return@withContext LoginResult.Error(e.message ?: "Error")
+        }
+    }
+
+    suspend fun getLiveSpeed(): LiveSpeed = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .build()
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            response.close()
+            
+            // Body format: "RX,TXRX,TX..."
+            // Last one is most recent. Let's split by comma and handle the adjacent TXRX issue.
+            // Actually, the format seems to be comma separated pairs but concatenated.
+            // Example: 19784.0,38704.01264.0,3568.0
+            // This is hard to parse reliably without a regex.
+            val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
+            val matches = regex.findAll(body).toList()
+            if (matches.isNotEmpty()) {
+                val last = matches.last()
+                return@withContext LiveSpeed(
+                    download = last.groupValues[1].toDouble(),
+                    upload = last.groupValues[2].toDouble()
+                )
+            }
+            return@withContext LiveSpeed(0.0, 0.0)
+        } catch (e: Exception) {
+            return@withContext LiveSpeed(0.0, 0.0)
         }
     }
 
@@ -154,74 +176,29 @@ class BijoyApi {
                 .url("https://selfcare.bijoy.net/customer/totalUsage")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .build()
-
             val response = client.newCall(request).execute()
             val jsonString = response.body?.string() ?: ""
             response.close()
-
             val jsonObject = JSONObject(jsonString)
             val valuesArray = jsonObject.getJSONArray("value")
             val usageList = ArrayList<UsageData>()
-
             for (i in 0 until valuesArray.length()) {
-                val innerJsonString = valuesArray.getString(i)
-                val innerObj = JSONObject(innerJsonString)
-                usageList.add(
-                    UsageData(
-                        date = innerObj.getString("date"),
-                        download = innerObj.getLong("download"),
-                        upload = innerObj.getLong("upload")
-                    )
-                )
+                val innerObj = JSONObject(valuesArray.getString(i))
+                usageList.add(UsageData(innerObj.getString("date"), innerObj.getLong("download"), innerObj.getLong("upload")))
             }
             return@withContext usageList
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return@withContext emptyList()
-        }
+        } catch (e: Exception) { emptyList() }
     }
 
     suspend fun getPaymentHistory(): List<PaymentHistoryItem> = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/customerhistory")
-                .build()
-
-            val response = client.newCall(request).execute()
-            val html = response.body?.string() ?: ""
+            val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/customerhistory").build()).execute()
+            val doc = Jsoup.parse(response.body?.string() ?: "")
             response.close()
-
-            val doc = Jsoup.parse(html)
-            val rows = doc.select("table tbody tr")
-            val history = ArrayList<PaymentHistoryItem>()
-
-            for (row in rows) {
+            doc.select("table tbody tr").map { row ->
                 val cols = row.select("td")
-                if (cols.size >= 4) {
-                    history.add(
-                        PaymentHistoryItem(
-                            date = cols[0].text(),
-                            amount = cols[1].text(),
-                            method = cols[2].text(),
-                            status = cols[3].text(), // rough guess
-                            trxId = if(cols.size > 4) cols[4].text() else ""
-                        )
-                    )
-                }
+                PaymentHistoryItem(cols[0].text(), cols[1].text(), cols[2].text(), cols[3].text(), if(cols.size > 4) cols[4].text() else "")
             }
-            return@withContext history
-        } catch (e: Exception) {
-            return@withContext emptyList()
-        }
-    }
-    
-    suspend fun getTickets(): List<TicketItem> = withContext(Dispatchers.IO) {
-        // Placeholder implementation logic - requires inspecting actual HTML of /customer/complainlist
-        return@withContext emptyList() 
-    } 
-    
-    suspend fun getReports(): List<String> = withContext(Dispatchers.IO) {
-        // Placeholder implementation logic
-        return@withContext emptyList()
+        } catch (e: Exception) { emptyList() }
     }
 }
