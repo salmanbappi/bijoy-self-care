@@ -105,14 +105,12 @@ class BijoyApi {
 
             val doc = Jsoup.parse(dashBody)
             
-            // Precise extraction
             val name = doc.select("aside h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             val pkg = doc.select("h1 span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
             
             fun getCardValue(labelText: String): String {
                 val label = doc.select("span:contains($labelText)").firstOrNull() ?: return "N/A"
                 val p = label.parent()?.select("p")?.firstOrNull() ?: return "N/A"
-                // Clean text from internal spans/fonts
                 return p.text().trim()
             }
 
@@ -148,27 +146,26 @@ class BijoyApi {
                 speedClient.newCall(request).execute().use { response ->
                     val source = response.body?.source() ?: return@use
                     
-                    // The server keeps adding to the same stream
-                    // We must read only what's new.
                     while (!source.exhausted()) {
-                        // Wait for data to arrive in the buffer
                         if (source.buffer.size == 0L) {
                             source.request(1)
                         }
                         
-                        // Read the entire current buffer content
                         val data = source.buffer.readUtf8()
-                        
-                        // Parse all pairs in this chunk and emit the last one
                         val matches = regex.findAll(data).toList()
                         if (matches.isNotEmpty()) {
                             val last = matches.last()
-                            val rx = last.groupValues[1].toDouble()
-                            val tx = last.groupValues[2].toDouble()
-                            emit(LiveSpeed(rx / 1000.0, tx / 1000.0))
+                            
+                            // SWAPPED: Site JS says rx (val[0]) is Upload, tx (val[1]) is Download
+                            val rx_upload = last.groupValues[1].toDouble()
+                            val tx_download = last.groupValues[2].toDouble()
+                            
+                            emit(LiveSpeed(
+                                download = tx_download / 1000.0,
+                                upload = rx_upload / 1000.0
+                            ))
                         }
-                        
-                        delay(1500) // Match the website's visual refresh rate
+                        delay(1000)
                     }
                 }
             } catch (e: Exception) {
