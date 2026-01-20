@@ -93,25 +93,25 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
                     icon = { Icon(Icons.Filled.Home, null) },
                     label = { Text("Home") },
                     selected = currentRoute == "dashboard",
-                    onClick = { if(currentRoute != "dashboard") navController.navigate("dashboard") { popUpTo(0) } }
+                    onClick = { navController.navigate("dashboard") { popUpTo(0) } }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.BarChart, null) },
                     label = { Text("Usage") },
                     selected = currentRoute == "usage",
-                    onClick = { if(currentRoute != "usage") navController.navigate("usage") { popUpTo(0) } }
+                    onClick = { navController.navigate("usage") { popUpTo(0) } }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.ReceiptLong, null) },
                     label = { Text("Bills") },
                     selected = currentRoute == "payment",
-                    onClick = { if(currentRoute != "payment") navController.navigate("payment") { popUpTo(0) } }
+                    onClick = { navController.navigate("payment") { popUpTo(0) } }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Settings, null) },
                     label = { Text("Settings") },
                     selected = currentRoute == "settings",
-                    onClick = { if(currentRoute != "settings") navController.navigate("settings") { popUpTo(0) } }
+                    onClick = { navController.navigate("settings") { popUpTo(0) } }
                 )
             }
         }
@@ -230,11 +230,21 @@ fun LiveSpeedCard(api: BijoyApi) {
 }
 
 @Composable
-fun SpeedDisplay(label: String, value: Double, color: Color) {
+fun SpeedDisplay(label: String, kbpsValue: Double, color: Color) {
+    // Convert Kbps to Mbps if needed (Input is already divided by 1000 once in Api)
+    // Wait, in previous Api.kt I did rx / 1000.0. So input is Kbps.
+    var value = kbpsValue
+    var unit = "Kbps"
+    
+    if (value >= 1000.0) {
+        value /= 1000.0
+        unit = "Mbps"
+    }
+
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall, color = color)
         Text(String.format(Locale.US, "%.1f", value), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-        Text("Kbps", style = MaterialTheme.typography.labelSmall)
+        Text(unit, style = MaterialTheme.typography.labelSmall)
     }
 }
 
