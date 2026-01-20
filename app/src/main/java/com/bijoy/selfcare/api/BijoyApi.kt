@@ -13,6 +13,9 @@ import org.jsoup.Jsoup
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.util.Log
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 
 data class DashboardData(
     val name: String,
@@ -99,23 +102,19 @@ class BijoyApi {
                 return@withContext LoginResult.Error("Login failed")
             }
 
-            // Initialize Speed Session
-            val initSpeedRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/du_graph_ajax?type=2")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .build()
-            client.newCall(initSpeedRequest).execute().close()
-
             val doc = Jsoup.parse(dashBody)
-            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
+            
+            // Fixed extraction logic - avoid sidebar by targeting content area
+            val mainContent = doc.select("main#content, main")
+            
+            val name = doc.select("aside h2").firstOrNull()?.ownText()?.trim() ?: "User"
             val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
             
-            // Refined Status Extractors
-            val accStatus = doc.select("div:has(span:contains(Account Status)) p").text().trim()
-            val connStatus = doc.select("div:has(span:contains(Connection Status)) p").text().trim().split("\n").first().trim()
-            
-            val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
-            val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
+            // Targeted selectors for status cards
+            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.select("span")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
 
             return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate))
         } catch (e: Exception) {
@@ -123,43 +122,55 @@ class BijoyApi {
         }
     }
 
-    suspend fun getLiveSpeed(): LiveSpeed = withContext(Dispatchers.IO) {
+    // New persistent flow for speed
+    fun getSpeedFlow(): Flow<LiveSpeed> = flow {
         try {
-            val request = Request.Builder()
+            // 1. Initialize speed session
+            val initRequest = Request.Builder()
+                .url("https://selfcare.bijoy.net/du_graph_ajax?type=2")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .build()
+            client.newCall(initRequest).execute().close()
+
+            // 2. Open long-lived stream
+            val speedRequest = Request.Builder()
                 .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "https://selfcare.bijoy.net/customer/dashboard")
                 .build()
-            
-            val response = client.newCall(request).execute()
-            val source = response.body?.source() ?: return@withContext LiveSpeed(0.0, 0.0)
-            
-            // Peek at the first 4KB of the stream
-            if (!source.request(1)) {
-                response.close()
-                return@withContext LiveSpeed(0.0, 0.0)
+
+            val speedClient = client.newBuilder()
+                .readTimeout(0, TimeUnit.SECONDS) // Endless read
+                .build()
+
+            speedClient.newCall(speedRequest).execute().use { response ->
+                val source = response.body?.source() ?: return@flow
+                var lastPos = 0L
+                val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
+
+                while (!source.exhausted()) {
+                    val currentData = source.buffer.clone().readUtf8()
+                    val newChunk = if (currentData.length > lastPos) currentData.substring(lastPos.toInt()) else ""
+                    
+                    if (newChunk.isNotEmpty()) {
+                        lastPos = currentData.length.toLong()
+                        val matches = regex.findAll(newChunk).toList()
+                        if (matches.isNotEmpty()) {
+                            val last = matches.last()
+                            emit(LiveSpeed(
+                                download = last.groupValues[1].toDouble() / 1000.0,
+                                upload = last.groupValues[2].toDouble() / 1000.0
+                            ))
+                        }
+                    }
+                    delay(1000) // Don't burn CPU checking buffer
+                    source.request(1) // Wait for at least one more byte
+                }
             }
-            
-            val data = source.buffer.clone().readUtf8()
-            response.close()
-            
-            // Format is concatenated "RX,TXRX,TX..."
-            // e.g. "1234.0,5678.0900.0,100.0"
-            // We want the absolute last pair.
-            val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
-            val matches = regex.findAll(data).toList()
-            if (matches.isNotEmpty()) {
-                val last = matches.last()
-                val rx = last.groupValues[1].toDouble()
-                val tx = last.groupValues[2].toDouble()
-                // Convert to Kbps (assuming bits per second)
-                return@withContext LiveSpeed(rx / 1000.0, tx / 1000.0)
-            }
-            return@withContext LiveSpeed(0.0, 0.0)
         } catch (e: Exception) {
-            return@withContext LiveSpeed(0.0, 0.0)
+            Log.e("BijoyApi", "Speed flow error", e)
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     suspend fun getUsageGraph(): List<UsageData> = withContext(Dispatchers.IO) {
         try {

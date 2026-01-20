@@ -93,25 +93,25 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
                     icon = { Icon(Icons.Filled.Home, null) },
                     label = { Text("Home") },
                     selected = currentRoute == "dashboard",
-                    onClick = { navController.navigate("dashboard") { popUpTo(0) } }
+                    onClick = { if(currentRoute != "dashboard") navController.navigate("dashboard") { popUpTo(0) } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.BarChart, null) },
+                    icon = { Icon(Icons.Filled.Speed, null) },
                     label = { Text("Usage") },
                     selected = currentRoute == "usage",
-                    onClick = { navController.navigate("usage") { popUpTo(0) } }
+                    onClick = { if(currentRoute != "usage") navController.navigate("usage") { popUpTo(0) } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.ReceiptLong, null) },
+                    icon = { Icon(Icons.Filled.History, null) },
                     label = { Text("Bills") },
                     selected = currentRoute == "payment",
-                    onClick = { navController.navigate("payment") { popUpTo(0) } }
+                    onClick = { if(currentRoute != "payment") navController.navigate("payment") { popUpTo(0) } }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Settings, null) },
                     label = { Text("Settings") },
                     selected = currentRoute == "settings",
-                    onClick = { navController.navigate("settings") { popUpTo(0) } }
+                    onClick = { if(currentRoute != "settings") navController.navigate("settings") { popUpTo(0) } }
                 )
             }
         }
@@ -196,7 +196,7 @@ fun DashboardScreen(data: DashboardData, api: BijoyApi) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InfoCardCompact("Expiry Date", data.expiryDate, Modifier.weight(1f))
-                InfoCardCompact("Status", data.accountStatus, Modifier.weight(1f))
+                InfoCardCompact("Account Status", data.accountStatus, Modifier.weight(1f))
             }
         }
     }
@@ -208,12 +208,10 @@ fun LiveSpeedCard(api: BijoyApi) {
     val history = remember { mutableStateListOf<LiveSpeed>() }
 
     LaunchedEffect(Unit) {
-        while(true) {
-            val newSpeed = api.getLiveSpeed()
+        api.getSpeedFlow().collect { newSpeed ->
             speed = newSpeed
             history.add(newSpeed)
-            if (history.size > 40) history.removeAt(0)
-            delay(2000)
+            if (history.size > 50) history.removeAt(0)
         }
     }
 
@@ -245,7 +243,7 @@ fun RealTimeChart(history: List<LiveSpeed>) {
     Canvas(Modifier.fillMaxWidth().height(80.dp)) {
         if (history.size < 2) return@Canvas
         val maxVal = history.maxOf { it.download.coerceAtLeast(it.upload) }.coerceAtLeast(100.0)
-        val stepX = size.width / 39f
+        val stepX = size.width / 49f
         val scaleY = size.height / maxVal.toFloat()
         val downPath = Path()
         val upPath = Path()
@@ -301,7 +299,7 @@ fun PaymentScreen(api: BijoyApi) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Billing History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        if (isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (isLoading) CircularProgressIndicator()
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(history) { item ->
                 Card(Modifier.fillMaxWidth()) {
