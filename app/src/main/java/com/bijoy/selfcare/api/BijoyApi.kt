@@ -9,14 +9,39 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
+import org.jsoup.Jsoup
 import java.util.concurrent.TimeUnit
+
+data class DashboardData(
+    val name: String,
+    val packageInfo: String,
+    val accountStatus: String,
+    val connectionStatus: String,
+    val balance: String = "N/A"
+)
+
+sealed class LoginResult {
+    data class Success(val data: DashboardData) : LoginResult()
+    data class Error(val message: String) : LoginResult()
+}
 
 class BijoyApi {
     private val cookieStore = HashMap<String, List<Cookie>>()
 
     private val cookieJar = object : CookieJar {
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookieStore[url.host] = cookies
+            val validCookies = cookies.filter { !it.value.equals("deleteMe", ignoreCase = true) }
+            val existingCookies = cookieStore[url.host]?.toMutableList() ?: ArrayList()
+            
+            for (cookie in validCookies) {
+                val index = existingCookies.indexOfFirst { it.name == cookie.name }
+                if (index != -1) {
+                    existingCookies[index] = cookie
+                } else {
+                    existingCookies.add(cookie)
+                }
+            }
+            cookieStore[url.host] = existingCookies
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
@@ -27,11 +52,13 @@ class BijoyApi {
     private val client = OkHttpClient.Builder()
         .cookieJar(cookieJar)
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        .followRedirects(true)
+        .followSslRedirects(true)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun login(username: String, pass: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun login(username: String, pass: String): LoginResult = withContext(Dispatchers.IO) {
         try {
             // 1. Initial GET to set cookies
             val initRequest = Request.Builder()
@@ -50,47 +77,62 @@ class BijoyApi {
                 .url("https://selfcare.bijoy.net/customer/login")
                 .post(formBody)
                 .header("Referer", "https://selfcare.bijoy.net/customer/")
+                .header("Origin", "https://selfcare.bijoy.net")
                 .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 .build()
 
             val response = client.newCall(loginRequest).execute()
-            val body = response.body?.string() ?: ""
             response.close()
 
-            // Check if login was successful (e.g. check for dashboard content or lack of error)
-            // The previous curl showed a 500 error on success but set a cookie. 
-            // Let's assume if we get a redirect or specific content it's good.
-            // Actually, the curl output showed a 500 error initially but then we saw 302 redirects when logged in properly.
-            // Let's check if we can access the dashboard.
-            
+            // 3. Check Dashboard
             val dashboardRequest = Request.Builder()
                 .url("https://selfcare.bijoy.net/customer/dashboard")
+                .header("Referer", "https://selfcare.bijoy.net/customer/login")
                 .build()
                 
             val dashResponse = client.newCall(dashboardRequest).execute()
             val dashBody = dashResponse.body?.string() ?: ""
+            val dashUrl = dashResponse.request.url.toString()
             dashResponse.close()
+
+            // If redirected back to login or root, it failed
+            if (dashUrl.contains("/customer/login") || dashUrl.endsWith("/customer/") || dashBody.contains("Sign in")) {
+                return@withContext LoginResult.Error("Login failed: Invalid credentials or session expired.")
+            }
+
+            // 4. Parse Dashboard Data
+            val doc = Jsoup.parse(dashBody)
             
-            // If we are logged in, we shouldn't be redirected back to login
-            // or we should see "Welcome" or something similar.
-            // Based on curl, dashboard redirected to logout then /customer/ then 200 OK.
-            // Wait, the curl output for dashboard access showed:
-            // HTTP/1.1 302
-            // Location: /customer/logout
-            // Then /customer/
-            // This implies the session might be invalid or something.
+            // Name: Bappy Shikder (inside h2 text)
+            // It might be complex to extract exactly because of the <i class="fa... status-indicator"> inside the h2
+            // We can take the text node of h2
+            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             
-            // However, for the purpose of this test app, let's just return true if we don't crash 
-            // and maybe if the cookie store has a JSESSIONID.
+            // Package: Inside span with bg-[#7674F8]
+            val pkg = doc.select("span.bg-\\[\\#7674F8\\]").text().trim()
             
-            val cookies = cookieStore["selfcare.bijoy.net"]
-            val hasSession = cookies?.any { it.name == "JSESSIONID" } == true
+            // Account Status: p under "Account Status" span
+            // This is a bit tricky with tailwind classes, let's look for the label
+            val accStatusLabel = doc.select("span:contains(Account Status)").first()
+            val accStatus = accStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
             
-            // Simple check: if we got a response and have a session cookie
-            return@withContext hasSession
+            // Connection Status: p under "Connection Status" span
+            val connStatusLabel = doc.select("span:contains(Connection Status)").first()
+            val connStatus = connStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
+
+            return@withContext LoginResult.Success(
+                DashboardData(
+                    name = name,
+                    packageInfo = pkg,
+                    accountStatus = accStatus,
+                    connectionStatus = connStatus
+                )
+            )
+
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext false
+            return@withContext LoginResult.Error(e.message ?: "Unknown error")
         }
     }
 }
