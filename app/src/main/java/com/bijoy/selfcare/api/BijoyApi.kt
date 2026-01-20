@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import org.jsoup.Jsoup
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 data class DashboardData(
@@ -18,6 +19,27 @@ data class DashboardData(
     val accountStatus: String,
     val connectionStatus: String,
     val balance: String = "N/A"
+)
+
+data class UsageData(
+    val date: String,
+    val download: Long,
+    val upload: Long
+)
+
+data class PaymentHistoryItem(
+    val date: String,
+    val amount: String,
+    val method: String,
+    val status: String,
+    val trxId: String
+)
+
+data class TicketItem(
+    val id: String,
+    val subject: String,
+    val status: String,
+    val date: String
 )
 
 sealed class LoginResult {
@@ -104,20 +126,10 @@ class BijoyApi {
             // 4. Parse Dashboard Data
             val doc = Jsoup.parse(dashBody)
             
-            // Name: Bappy Shikder (inside h2 text)
-            // It might be complex to extract exactly because of the <i class="fa... status-indicator"> inside the h2
-            // We can take the text node of h2
             val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
-            
-            // Package: Inside span with bg-[#7674F8]
-            val pkg = doc.select("span.bg-\\[\\#7674F8\\]").text().trim()
-            
-            // Account Status: p under "Account Status" span
-            // This is a bit tricky with tailwind classes, let's look for the label
+            val pkg = doc.select("span.bg-\[\\#7674F8\]").text().trim()
             val accStatusLabel = doc.select("span:contains(Account Status)").first()
             val accStatus = accStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
-            
-            // Connection Status: p under "Connection Status" span
             val connStatusLabel = doc.select("span:contains(Connection Status)").first()
             val connStatus = connStatusLabel?.nextElementSibling()?.text()?.trim() ?: "Unknown"
 
@@ -134,5 +146,82 @@ class BijoyApi {
             e.printStackTrace()
             return@withContext LoginResult.Error(e.message ?: "Unknown error")
         }
+    }
+
+    suspend fun getUsageGraph(): List<UsageData> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("https://selfcare.bijoy.net/customer/totalUsage")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val jsonString = response.body?.string() ?: ""
+            response.close()
+
+            val jsonObject = JSONObject(jsonString)
+            val valuesArray = jsonObject.getJSONArray("value")
+            val usageList = ArrayList<UsageData>()
+
+            for (i in 0 until valuesArray.length()) {
+                val innerJsonString = valuesArray.getString(i)
+                val innerObj = JSONObject(innerJsonString)
+                usageList.add(
+                    UsageData(
+                        date = innerObj.getString("date"),
+                        download = innerObj.getLong("download"),
+                        upload = innerObj.getLong("upload")
+                    )
+                )
+            }
+            return@withContext usageList
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext emptyList()
+        }
+    }
+
+    suspend fun getPaymentHistory(): List<PaymentHistoryItem> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("https://selfcare.bijoy.net/customer/customerhistory")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val html = response.body?.string() ?: ""
+            response.close()
+
+            val doc = Jsoup.parse(html)
+            val rows = doc.select("table tbody tr")
+            val history = ArrayList<PaymentHistoryItem>()
+
+            for (row in rows) {
+                val cols = row.select("td")
+                if (cols.size >= 4) {
+                    history.add(
+                        PaymentHistoryItem(
+                            date = cols[0].text(),
+                            amount = cols[1].text(),
+                            method = cols[2].text(),
+                            status = cols[3].text(), // rough guess
+                            trxId = if(cols.size > 4) cols[4].text() else ""
+                        )
+                    )
+                }
+            }
+            return@withContext history
+        } catch (e: Exception) {
+            return@withContext emptyList()
+        }
+    }
+    
+    suspend fun getTickets(): List<TicketItem> = withContext(Dispatchers.IO) {
+        // Placeholder implementation logic - requires inspecting actual HTML of /customer/complainlist
+        return@withContext emptyList() 
+    } 
+    
+    suspend fun getReports(): List<String> = withContext(Dispatchers.IO) {
+        // Placeholder implementation logic
+        return@withContext emptyList()
     }
 }
