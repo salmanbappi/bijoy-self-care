@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.util.Log
@@ -96,29 +97,25 @@ class BijoyApi {
             dashResponse.close()
 
             if (dashUrl.contains("/login") || dashBody.contains("Sign in")) {
-                return@withContext LoginResult.Error("Login failed: Invalid credentials")
+                return@withContext LoginResult.Error("Login failed")
             }
 
             val doc = Jsoup.parse(dashBody)
+            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
+            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
+            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("font")?.firstOrNull()?.text()?.trim() ?: "N/A"
             
-            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: doc.select("h2").firstOrNull()?.text()?.trim() ?: "User"
-            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: doc.select("p:contains(package)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
-            
-            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("p, font, span")?.lastOrNull()?.text()?.trim() ?: "N/A"
-            
-            // Connection Status search
-            val connStatusLabel = doc.select("span:contains(Connection Status)").firstOrNull()
-            val connStatus = connStatusLabel?.parent()?.select("span")?.filter { it.text().contains("ONLINE", true) || it.text().contains("OFFLINE", true) }?.firstOrNull()?.text()?.trim() 
-                ?: connStatusLabel?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            // Fixed Connection Status Extraction
+            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.let { parent ->
+                parent.select("span").firstOrNull { it.text().contains("ONLINE", true) || it.text().contains("OFFLINE", true) }?.text()
+            } ?: "N/A"
             
             val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
             val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
 
-            return@withContext LoginResult.Success(
-                DashboardData(name, pkg, accStatus, connStatus, expiry, rate)
-            )
+            return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate))
         } catch (e: Exception) {
-            return@withContext LoginResult.Error(e.message ?: "Network error")
+            return@withContext LoginResult.Error(e.message ?: "Error")
         }
     }
 
@@ -130,23 +127,23 @@ class BijoyApi {
                 .header("Referer", "https://selfcare.bijoy.net/customer/dashboard")
                 .build()
             
-            // We use a dedicated call and read ONLY the currently available bytes
             val response = client.newCall(request).execute()
             val source = response.body?.source() ?: return@withContext LiveSpeed(0.0, 0.0)
             
-            // Wait up to 100ms for some data if empty
-            source.request(1)
+            // Read ONLY the available bytes immediately
+            if (!source.request(1)) {
+                response.close()
+                return@withContext LiveSpeed(0.0, 0.0)
+            }
+            
             val data = source.buffer.clone().readUtf8()
-            response.close() // Closing stops the stream for this call
+            response.close()
             
             val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
             val matches = regex.findAll(data).toList()
             if (matches.isNotEmpty()) {
                 val last = matches.last()
-                return@withContext LiveSpeed(
-                    download = last.groupValues[1].toDouble() / 1000.0,
-                    upload = last.groupValues[2].toDouble() / 1000.0
-                )
+                return@withContext LiveSpeed(last.groupValues[1].toDouble() / 1000.0, last.groupValues[2].toDouble() / 1000.0)
             }
             return@withContext LiveSpeed(0.0, 0.0)
         } catch (e: Exception) {
