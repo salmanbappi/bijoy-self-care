@@ -10,7 +10,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Element
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import android.util.Log
@@ -100,15 +99,20 @@ class BijoyApi {
                 return@withContext LoginResult.Error("Login failed")
             }
 
+            // Initialize Speed Session
+            val initSpeedRequest = Request.Builder()
+                .url("https://selfcare.bijoy.net/du_graph_ajax?type=2")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .build()
+            client.newCall(initSpeedRequest).execute().close()
+
             val doc = Jsoup.parse(dashBody)
             val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
-            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("font")?.firstOrNull()?.text()?.trim() ?: "N/A"
             
-            // Fixed Connection Status Extraction
-            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.let { parent ->
-                parent.select("span").firstOrNull { it.text().contains("ONLINE", true) || it.text().contains("OFFLINE", true) }?.text()
-            } ?: "N/A"
+            // Refined Status Extractors
+            val accStatus = doc.select("div:has(span:contains(Account Status)) p").text().trim()
+            val connStatus = doc.select("div:has(span:contains(Connection Status)) p").text().trim().split("\n").first().trim()
             
             val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
             val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
@@ -130,7 +134,7 @@ class BijoyApi {
             val response = client.newCall(request).execute()
             val source = response.body?.source() ?: return@withContext LiveSpeed(0.0, 0.0)
             
-            // Read ONLY the available bytes immediately
+            // Peek at the first 4KB of the stream
             if (!source.request(1)) {
                 response.close()
                 return@withContext LiveSpeed(0.0, 0.0)
@@ -139,11 +143,17 @@ class BijoyApi {
             val data = source.buffer.clone().readUtf8()
             response.close()
             
+            // Format is concatenated "RX,TXRX,TX..."
+            // e.g. "1234.0,5678.0900.0,100.0"
+            // We want the absolute last pair.
             val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
             val matches = regex.findAll(data).toList()
             if (matches.isNotEmpty()) {
                 val last = matches.last()
-                return@withContext LiveSpeed(last.groupValues[1].toDouble() / 1000.0, last.groupValues[2].toDouble() / 1000.0)
+                val rx = last.groupValues[1].toDouble()
+                val tx = last.groupValues[2].toDouble()
+                // Convert to Kbps (assuming bits per second)
+                return@withContext LiveSpeed(rx / 1000.0, tx / 1000.0)
             }
             return@withContext LiveSpeed(0.0, 0.0)
         } catch (e: Exception) {
@@ -153,11 +163,7 @@ class BijoyApi {
 
     suspend fun getUsageGraph(): List<UsageData> = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
-                .url("https://selfcare.bijoy.net/customer/totalUsage")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/totalUsage").header("X-Requested-With", "XMLHttpRequest").build()).execute()
             val jsonObject = JSONObject(response.body?.string() ?: "")
             response.close()
             val valuesArray = jsonObject.getJSONArray("value")
@@ -166,7 +172,7 @@ class BijoyApi {
                 val innerObj = JSONObject(valuesArray.getString(i))
                 usageList.add(UsageData(innerObj.getString("date"), innerObj.getLong("download"), innerObj.getLong("upload")))
             }
-            return@withContext usageList
+            usageList
         } catch (e: Exception) { emptyList() }
     }
 

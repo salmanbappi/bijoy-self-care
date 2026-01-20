@@ -53,8 +53,8 @@ fun AppContent() {
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("bijoy_prefs", Context.MODE_PRIVATE) }
     
-    var username by remember { mutableStateOf(sharedPrefs.getString("username", "840135") ?: "840135") }
-    var password by remember { mutableStateOf(sharedPrefs.getString("password", "6666") ?: "6666") }
+    var username by remember { mutableStateOf(sharedPrefs.getString("username", "") ?: "") }
+    var password by remember { mutableStateOf(sharedPrefs.getString("password", "") ?: "") }
     
     var dashboardData by remember { mutableStateOf<DashboardData?>(null) }
     var isLoggedIn by remember { mutableStateOf(false) }
@@ -62,6 +62,9 @@ fun AppContent() {
 
     if (isLoggedIn && dashboardData != null) {
         MainScreen(data = dashboardData!!, api = api, onLogout = {
+            sharedPrefs.edit().clear().apply()
+            username = ""
+            password = ""
             isLoggedIn = false
             dashboardData = null
         })
@@ -87,28 +90,28 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
                 val currentRoute = navBackStackEntry?.destination?.route
                 
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Dashboard, null) },
+                    icon = { Icon(Icons.Filled.Home, null) },
                     label = { Text("Home") },
                     selected = currentRoute == "dashboard",
-                    onClick = { if(currentRoute != "dashboard") navController.navigate("dashboard") }
+                    onClick = { navController.navigate("dashboard") { popUpTo(0) } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Speed, null) },
+                    icon = { Icon(Icons.Filled.BarChart, null) },
                     label = { Text("Usage") },
                     selected = currentRoute == "usage",
-                    onClick = { if(currentRoute != "usage") navController.navigate("usage") }
+                    onClick = { navController.navigate("usage") { popUpTo(0) } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.History, null) },
+                    icon = { Icon(Icons.Filled.ReceiptLong, null) },
                     label = { Text("Bills") },
                     selected = currentRoute == "payment",
-                    onClick = { if(currentRoute != "payment") navController.navigate("payment") }
+                    onClick = { navController.navigate("payment") { popUpTo(0) } }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Settings, null) },
                     label = { Text("Settings") },
-                    selected = currentRoute == "support",
-                    onClick = { if(currentRoute != "support") navController.navigate("support") }
+                    selected = currentRoute == "settings",
+                    onClick = { navController.navigate("settings") { popUpTo(0) } }
                 )
             }
         }
@@ -117,35 +120,35 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
             composable("dashboard") { DashboardScreen(data, api) }
             composable("usage") { UsageScreen(api) }
             composable("payment") { PaymentScreen(api) }
-            composable("support") { SupportScreen(onLogout) }
+            composable("settings") { SettingsScreen(onLogout) }
         }
     }
 }
 
 @Composable
 fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSuccess: (DashboardData, String, String) -> Unit) {
-    var username by remember { mutableStateOf(initialU) }
-    var password by remember { mutableStateOf(initialP) }
+    var username by remember { mutableStateOf(if(initialU.isEmpty()) "840135" else initialU) }
+    var password by remember { mutableStateOf(if(initialP.isEmpty()) "6666" else initialP) }
     var status by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     
     LaunchedEffect(Unit) {
-        if (username.isNotEmpty() && password.isNotEmpty()) {
+        if (initialU.isNotEmpty() && initialP.isNotEmpty()) {
             isLoading = true
-            val result = api.login(username, password)
+            val result = api.login(initialU, initialP)
             isLoading = false
-            if (result is LoginResult.Success) onLoginSuccess(result.data, username, password)
+            if (result is LoginResult.Success) onLoginSuccess(result.data, initialU, initialP)
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Bijoy Self Care", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Column(modifier = Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Bijoy Self Care", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(48.dp))
         OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Customer ID") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(32.dp))
         Button(onClick = {
             isLoading = true
             scope.launch {
@@ -153,8 +156,8 @@ fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSucces
                 isLoading = false
                 if (result is LoginResult.Success) onLoginSuccess(result.data, username, password) else status = "Login Failed"
             }
-        }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading) {
-            Text("Login")
+        }, modifier = Modifier.fillMaxWidth().height(56.dp), enabled = !isLoading) {
+            Text("LOGIN", fontWeight = FontWeight.Bold)
         }
         if (isLoading) CircularProgressIndicator(Modifier.padding(top = 16.dp))
         Text(status, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
@@ -163,27 +166,38 @@ fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSucces
 
 @Composable
 fun DashboardScreen(data: DashboardData, api: BijoyApi) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Text("Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
+        }
+        item {
             LiveSpeedCard(api)
-            Spacer(Modifier.height(16.dp))
+        }
+        item {
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Welcome, ${data.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Package: ${data.packageInfo}", style = MaterialTheme.typography.bodyMedium)
-                    val isOnline = data.connectionStatus.contains("ONLINE", ignoreCase = true)
-                    Text("Status: ${data.connectionStatus}", color = if(isOnline) Color(0xFF00C853) else Color.Red, fontWeight = FontWeight.Bold)
+                Column(Modifier.padding(20.dp)) {
+                    Text("Welcome,", style = MaterialTheme.typography.titleMedium)
+                    Text(data.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Connection: ", style = MaterialTheme.typography.bodyMedium)
+                        val isOnline = data.connectionStatus.contains("ONLINE", true)
+                        Text(data.connectionStatus, color = if(isOnline) Color(0xFF00C853) else Color.Red, fontWeight = FontWeight.ExtraBold)
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+        }
+        item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                InfoCardCompact("Expiry", data.expiryDate, Modifier.weight(1f))
+                InfoCardCompact("Package", data.packageInfo, Modifier.weight(1f))
                 InfoCardCompact("Plan Rate", data.planRate, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(16.dp))
-            InfoCardCompact("Account Status", data.accountStatus, Modifier.fillMaxWidth())
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                InfoCardCompact("Expiry Date", data.expiryDate, Modifier.weight(1f))
+                InfoCardCompact("Status", data.accountStatus, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -198,18 +212,18 @@ fun LiveSpeedCard(api: BijoyApi) {
             val newSpeed = api.getLiveSpeed()
             speed = newSpeed
             history.add(newSpeed)
-            if (history.size > 30) history.removeAt(0)
-            delay(3000)
+            if (history.size > 40) history.removeAt(0)
+            delay(2000)
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("Real-Time Speed", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(8.dp))
+            Text("Real-Time Bandwidth", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SpeedIndicator("Download", speed.download, Color(0xFF4CAF50))
-                SpeedIndicator("Upload", speed.upload, Color(0xFF2196F3))
+                SpeedDisplay("Download", speed.download, Color(0xFF4CAF50))
+                SpeedDisplay("Upload", speed.upload, Color(0xFF2196F3))
             }
             Spacer(Modifier.height(16.dp))
             RealTimeChart(history)
@@ -218,19 +232,20 @@ fun LiveSpeedCard(api: BijoyApi) {
 }
 
 @Composable
-fun SpeedIndicator(label: String, value: Double, color: Color) {
+fun SpeedDisplay(label: String, value: Double, color: Color) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall, color = color)
-        Text(String.format(Locale.US, "%.2f Kbps", value), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(String.format(Locale.US, "%.1f", value), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+        Text("Kbps", style = MaterialTheme.typography.labelSmall)
     }
 }
 
 @Composable
 fun RealTimeChart(history: List<LiveSpeed>) {
-    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(80.dp)) {
         if (history.size < 2) return@Canvas
         val maxVal = history.maxOf { it.download.coerceAtLeast(it.upload) }.coerceAtLeast(100.0)
-        val stepX = size.width / 29f
+        val stepX = size.width / 39f
         val scaleY = size.height / maxVal.toFloat()
         val downPath = Path()
         val upPath = Path()
@@ -241,8 +256,8 @@ fun RealTimeChart(history: List<LiveSpeed>) {
             if (i == 0) { downPath.moveTo(x, dy); upPath.moveTo(x, uy) } 
             else { downPath.lineTo(x, dy); upPath.lineTo(x, uy) }
         }
-        drawPath(downPath, Color(0xFF4CAF50), style = Stroke(width = 2.dp.toPx()))
-        drawPath(upPath, Color(0xFF2196F3), style = Stroke(width = 2.dp.toPx()))
+        drawPath(downPath, Color(0xFF4CAF50), style = Stroke(width = 2.5.dp.toPx()))
+        drawPath(upPath, Color(0xFF2196F3), style = Stroke(width = 2.5.dp.toPx()))
     }
 }
 
@@ -250,8 +265,8 @@ fun RealTimeChart(history: List<LiveSpeed>) {
 fun InfoCardCompact(label: String, value: String, modifier: Modifier = Modifier) {
     Card(modifier = modifier) {
         Column(Modifier.padding(16.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -264,11 +279,15 @@ fun UsageScreen(api: BijoyApi) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Usage Reports", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        if (isLoading) CircularProgressIndicator()
-        else LazyColumn {
+        if (isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(usageData) { item ->
-                ListItem(headlineContent = { Text(item.date) }, supportingContent = { Text("Down: ${formatBytes(item.download)} | Up: ${formatBytes(item.upload)}") })
-                Divider()
+                Card(Modifier.fillMaxWidth()) {
+                    ListItem(
+                        headlineContent = { Text(item.date, fontWeight = FontWeight.Bold) },
+                        supportingContent = { Text("Download: ${formatBytes(item.download)} | Upload: ${formatBytes(item.upload)}") }
+                    )
+                }
             }
         }
     }
@@ -282,16 +301,18 @@ fun PaymentScreen(api: BijoyApi) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Billing History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
-        if (isLoading) CircularProgressIndicator()
-        else LazyColumn {
+        if (isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(history) { item ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(item.date, fontWeight = FontWeight.Bold)
-                            Text(item.amount, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            Text(item.amount, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black)
                         }
-                        Text("Method: ${item.method} | Status: ${item.status}")
+                        Spacer(Modifier.height(4.dp))
+                        Text("Method: ${item.method}", style = MaterialTheme.typography.bodySmall)
+                        Text("Status: ${item.status}", color = if(item.status.contains("Success", true)) Color(0xFF00C853) else Color.Gray, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -300,7 +321,7 @@ fun PaymentScreen(api: BijoyApi) {
 }
 
 @Composable
-fun SupportScreen(onLogout: () -> Unit) {
+fun SettingsScreen(onLogout: () -> Unit) {
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("bijoy_prefs", Context.MODE_PRIVATE) }
     
@@ -309,19 +330,16 @@ fun SupportScreen(onLogout: () -> Unit) {
         
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Stored Credentials", style = MaterialTheme.typography.titleMedium)
+                Text("Account Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("User: ${sharedPrefs.getString("username", "N/A")}")
-                Text("Pass: ****")
+                Text("Stored User: ${sharedPrefs.getString("username", "N/A")}")
+                Text("Service: Bijoy Broadband")
             }
         }
         
         Spacer(Modifier.weight(1f))
-        Button(onClick = {
-            sharedPrefs.edit().clear().apply()
-            onLogout()
-        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
-            Text("Clear Credentials & Logout")
+        Button(onClick = onLogout, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+            Text("CLEAR DATA & LOGOUT", fontWeight = FontWeight.Bold)
         }
     }
 }
