@@ -1,5 +1,6 @@
 package com.bijoy.selfcare
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +21,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,17 +50,26 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppContent() {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("bijoy_prefs", Context.MODE_PRIVATE) }
+    
+    var username by remember { mutableStateOf(sharedPrefs.getString("username", "840135") ?: "840135") }
+    var password by remember { mutableStateOf(sharedPrefs.getString("password", "6666") ?: "6666") }
+    
     var dashboardData by remember { mutableStateOf<DashboardData?>(null) }
     var isLoggedIn by remember { mutableStateOf(false) }
     val api = remember { BijoyApi() }
 
     if (isLoggedIn && dashboardData != null) {
-        MainScreen(data = dashboardData!!, api = api) {
+        MainScreen(data = dashboardData!!, api = api, onLogout = {
             isLoggedIn = false
             dashboardData = null
-        }
+        })
     } else {
-        LoginScreen(api) { data ->
+        LoginScreen(api, username, password) { data, u, p ->
+            sharedPrefs.edit().putString("username", u).putString("password", p).apply()
+            username = u
+            password = p
             dashboardData = data
             isLoggedIn = true
         }
@@ -77,33 +88,33 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Dashboard, null) },
-                    label = { Text("Dashboard") },
+                    label = { Text("Home") },
                     selected = currentRoute == "dashboard",
-                    onClick = { navController.navigate("dashboard") }
+                    onClick = { if(currentRoute != "dashboard") navController.navigate("dashboard") }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Speed, null) },
                     label = { Text("Usage") },
                     selected = currentRoute == "usage",
-                    onClick = { navController.navigate("usage") }
+                    onClick = { if(currentRoute != "usage") navController.navigate("usage") }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.History, null) },
-                    label = { Text("Payments") },
+                    label = { Text("Bills") },
                     selected = currentRoute == "payment",
-                    onClick = { navController.navigate("payment") }
+                    onClick = { if(currentRoute != "payment") navController.navigate("payment") }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Settings, null) },
                     label = { Text("Settings") },
                     selected = currentRoute == "support",
-                    onClick = { navController.navigate("support") }
+                    onClick = { if(currentRoute != "support") navController.navigate("support") }
                 )
             }
         }
     ) { innerPadding ->
         NavHost(navController = navController, startDestination = "dashboard", modifier = Modifier.padding(innerPadding)) {
-            composable("dashboard") { DashboardScreen(data, api, onLogout) }
+            composable("dashboard") { DashboardScreen(data, api) }
             composable("usage") { UsageScreen(api) }
             composable("payment") { PaymentScreen(api) }
             composable("support") { SupportScreen(onLogout) }
@@ -112,18 +123,20 @@ fun MainScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
 }
 
 @Composable
-fun LoginScreen(api: BijoyApi, onLoginSuccess: (DashboardData) -> Unit) {
-    var username by remember { mutableStateOf("840135") }
-    var password by remember { mutableStateOf("6666") }
+fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSuccess: (DashboardData, String, String) -> Unit) {
+    var username by remember { mutableStateOf(initialU) }
+    var password by remember { mutableStateOf(initialP) }
     var status by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     
     LaunchedEffect(Unit) {
-        isLoading = true
-        val result = api.login(username, password)
-        isLoading = false
-        if (result is LoginResult.Success) onLoginSuccess(result.data)
+        if (username.isNotEmpty() && password.isNotEmpty()) {
+            isLoading = true
+            val result = api.login(username, password)
+            isLoading = false
+            if (result is LoginResult.Success) onLoginSuccess(result.data, username, password)
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -138,7 +151,7 @@ fun LoginScreen(api: BijoyApi, onLoginSuccess: (DashboardData) -> Unit) {
             scope.launch {
                 val result = api.login(username, password)
                 isLoading = false
-                if (result is LoginResult.Success) onLoginSuccess(result.data) else status = "Login Failed"
+                if (result is LoginResult.Success) onLoginSuccess(result.data, username, password) else status = "Login Failed"
             }
         }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading) {
             Text("Login")
@@ -149,24 +162,22 @@ fun LoginScreen(api: BijoyApi, onLoginSuccess: (DashboardData) -> Unit) {
 }
 
 @Composable
-fun DashboardScreen(data: DashboardData, api: BijoyApi, onLogout: () -> Unit) {
+fun DashboardScreen(data: DashboardData, api: BijoyApi) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         item {
             Text("Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
-            
             LiveSpeedCard(api)
             Spacer(Modifier.height(16.dp))
-            
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Welcome, ${data.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Package: ${data.packageInfo}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Status: ${data.connectionStatus}", color = if(data.connectionStatus.contains("ONLINE")) Color(0xFF00C853) else Color.Red, fontWeight = FontWeight.Bold)
+                    val isOnline = data.connectionStatus.contains("ONLINE", ignoreCase = true)
+                    Text("Status: ${data.connectionStatus}", color = if(isOnline) Color(0xFF00C853) else Color.Red, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(Modifier.height(16.dp))
-            
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 InfoCardCompact("Expiry", data.expiryDate, Modifier.weight(1f))
                 InfoCardCompact("Plan Rate", data.planRate, Modifier.weight(1f))
@@ -221,23 +232,15 @@ fun RealTimeChart(history: List<LiveSpeed>) {
         val maxVal = history.maxOf { it.download.coerceAtLeast(it.upload) }.coerceAtLeast(100.0)
         val stepX = size.width / 29f
         val scaleY = size.height / maxVal.toFloat()
-
         val downPath = Path()
         val upPath = Path()
-
         history.forEachIndexed { i, s ->
             val x = i * stepX
             val dy = size.height - (s.download.toFloat() * scaleY)
             val uy = size.height - (s.upload.toFloat() * scaleY)
-            if (i == 0) {
-                downPath.moveTo(x, dy)
-                upPath.moveTo(x, uy)
-            } else {
-                downPath.lineTo(x, dy)
-                upPath.lineTo(x, uy)
-            }
+            if (i == 0) { downPath.moveTo(x, dy); upPath.moveTo(x, uy) } 
+            else { downPath.lineTo(x, dy); upPath.lineTo(x, uy) }
         }
-
         drawPath(downPath, Color(0xFF4CAF50), style = Stroke(width = 2.dp.toPx()))
         drawPath(upPath, Color(0xFF2196F3), style = Stroke(width = 2.dp.toPx()))
     }
@@ -257,25 +260,15 @@ fun InfoCardCompact(label: String, value: String, modifier: Modifier = Modifier)
 fun UsageScreen(api: BijoyApi) {
     var usageData by remember { mutableStateOf<List<UsageData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        usageData = api.getUsageGraph()
-        isLoading = false
-    }
-
+    LaunchedEffect(Unit) { usageData = api.getUsageGraph(); isLoading = false }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Usage Reports", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         if (isLoading) CircularProgressIndicator()
-        else {
-            LazyColumn {
-                items(usageData) { item ->
-                    ListItem(
-                        headlineContent = { Text(item.date) },
-                        supportingContent = { Text("Down: ${formatBytes(item.download)} | Up: ${formatBytes(item.upload)}") }
-                    )
-                    Divider()
-                }
+        else LazyColumn {
+            items(usageData) { item ->
+                ListItem(headlineContent = { Text(item.date) }, supportingContent = { Text("Down: ${formatBytes(item.download)} | Up: ${formatBytes(item.upload)}") })
+                Divider()
             }
         }
     }
@@ -285,27 +278,20 @@ fun UsageScreen(api: BijoyApi) {
 fun PaymentScreen(api: BijoyApi) {
     var history by remember { mutableStateOf<List<PaymentHistoryItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        history = api.getPaymentHistory()
-        isLoading = false
-    }
-
+    LaunchedEffect(Unit) { history = api.getPaymentHistory(); isLoading = false }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Billing History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         if (isLoading) CircularProgressIndicator()
-        else {
-            LazyColumn {
-                items(history) { item ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(item.date, fontWeight = FontWeight.Bold)
-                                Text(item.amount, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                            }
-                            Text("Method: ${item.method} | Status: ${item.status}")
+        else LazyColumn {
+            items(history) { item ->
+                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(item.date, fontWeight = FontWeight.Bold)
+                            Text(item.amount, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
+                        Text("Method: ${item.method} | Status: ${item.status}")
                     }
                 }
             }
@@ -315,11 +301,27 @@ fun PaymentScreen(api: BijoyApi) {
 
 @Composable
 fun SupportScreen(onLogout: () -> Unit) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("bijoy_prefs", Context.MODE_PRIVATE) }
+    
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Stored Credentials", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("User: ${sharedPrefs.getString("username", "N/A")}")
+                Text("Pass: ****")
+            }
+        }
+        
         Spacer(Modifier.weight(1f))
-        Button(onClick = onLogout, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
-            Text("Logout")
+        Button(onClick = {
+            sharedPrefs.edit().clear().apply()
+            onLogout()
+        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+            Text("Clear Credentials & Logout")
         }
     }
 }

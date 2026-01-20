@@ -96,23 +96,20 @@ class BijoyApi {
             dashResponse.close()
 
             if (dashUrl.contains("/login") || dashBody.contains("Sign in")) {
-                return@withContext LoginResult.Error("Login failed")
+                return@withContext LoginResult.Error("Login failed: Invalid credentials")
             }
 
             val doc = Jsoup.parse(dashBody)
             
-            // Name: Bappy Shikder
-            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
+            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: doc.select("h2").firstOrNull()?.text()?.trim() ?: "User"
+            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: doc.select("p:contains(package)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
             
-            // Package: 25 Mbps
-            val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "Unknown Package"
+            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("p, font, span")?.lastOrNull()?.text()?.trim() ?: "N/A"
             
-            // Status Cards - using more direct traversal
-            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
-            
-            // Connection Status: contains a span with ONLINE
-            val connStatusP = doc.select("span:contains(Connection Status)").firstOrNull()?.nextElementSibling()
-            val connStatus = connStatusP?.select("span")?.firstOrNull()?.text()?.trim() ?: connStatusP?.text()?.trim() ?: "N/A"
+            // Connection Status search
+            val connStatusLabel = doc.select("span:contains(Connection Status)").firstOrNull()
+            val connStatus = connStatusLabel?.parent()?.select("span")?.filter { it.text().contains("ONLINE", true) || it.text().contains("OFFLINE", true) }?.firstOrNull()?.text()?.trim() 
+                ?: connStatusLabel?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
             
             val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
             val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.nextElementSibling()?.text()?.trim() ?: "N/A"
@@ -121,38 +118,35 @@ class BijoyApi {
                 DashboardData(name, pkg, accStatus, connStatus, expiry, rate)
             )
         } catch (e: Exception) {
-            return@withContext LoginResult.Error(e.message ?: "Error")
+            return@withContext LoginResult.Error(e.message ?: "Network error")
         }
     }
 
     suspend fun getLiveSpeed(): LiveSpeed = withContext(Dispatchers.IO) {
         try {
-            // Speed server sends a stream. We open it, read the current chunk, and close.
             val request = Request.Builder()
                 .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Referer", "https://selfcare.bijoy.net/customer/dashboard")
                 .build()
             
+            // We use a dedicated call and read ONLY the currently available bytes
             val response = client.newCall(request).execute()
             val source = response.body?.source() ?: return@withContext LiveSpeed(0.0, 0.0)
             
-            // We only need the latest data point. 
-            // Instead of readUtf8() which waits for EOF, we read whatever is in the first buffer.
-            val body = if (source.request(2048)) {
-                source.buffer.clone().readUtf8()
-            } else {
-                source.readUtf8()
-            }
-            response.close()
+            // Wait up to 100ms for some data if empty
+            source.request(1)
+            val data = source.buffer.clone().readUtf8()
+            response.close() // Closing stops the stream for this call
             
             val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
-            val matches = regex.findAll(body).toList()
+            val matches = regex.findAll(data).toList()
             if (matches.isNotEmpty()) {
                 val last = matches.last()
-                val rx = last.groupValues[1].toDouble()
-                val tx = last.groupValues[2].toDouble()
-                return@withContext LiveSpeed(rx / 1000.0, tx / 1000.0)
+                return@withContext LiveSpeed(
+                    download = last.groupValues[1].toDouble() / 1000.0,
+                    upload = last.groupValues[2].toDouble() / 1000.0
+                )
             }
             return@withContext LiveSpeed(0.0, 0.0)
         } catch (e: Exception) {
@@ -167,9 +161,8 @@ class BijoyApi {
                 .header("X-Requested-With", "XMLHttpRequest")
                 .build()
             val response = client.newCall(request).execute()
-            val jsonString = response.body?.string() ?: ""
+            val jsonObject = JSONObject(response.body?.string() ?: "")
             response.close()
-            val jsonObject = JSONObject(jsonString)
             val valuesArray = jsonObject.getJSONArray("value")
             val usageList = ArrayList<UsageData>()
             for (i in 0 until valuesArray.length()) {
