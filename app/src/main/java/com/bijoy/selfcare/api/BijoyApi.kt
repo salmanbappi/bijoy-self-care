@@ -24,8 +24,7 @@ data class DashboardData(
     val accountStatus: String,
     val connectionStatus: String,
     val expiryDate: String,
-    val planRate: String,
-    val balance: String = "N/A"
+    val planRate: String
 )
 
 data class UsageData(
@@ -36,16 +35,14 @@ data class UsageData(
 
 data class LiveSpeed(
     val download: Double,
-    val upload: Double,
-    val unit: String = "Kbps"
+    val upload: Double
 )
 
 data class PaymentHistoryItem(
     val date: String,
     val amount: String,
     val method: String,
-    val status: String,
-    val trxId: String
+    val status: String
 )
 
 sealed class LoginResult {
@@ -58,9 +55,9 @@ class BijoyApi {
 
     private val cookieJar = object : CookieJar {
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            val validCookies = cookies.filter { !it.value.equals("deleteMe", ignoreCase = true) }
             val existingCookies = cookieStore[url.host]?.toMutableList() ?: ArrayList()
-            for (cookie in validCookies) {
+            for (cookie in cookies) {
+                if (cookie.value.equals("deleteMe", true)) continue
                 val index = existingCookies.indexOfFirst { it.name == cookie.name }
                 if (index != -1) existingCookies[index] = cookie else existingCookies.add(cookie)
             }
@@ -71,120 +68,116 @@ class BijoyApi {
 
     private val client = OkHttpClient.Builder()
         .cookieJar(cookieJar)
-        .followRedirects(true)
-        .followSslRedirects(true)
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
     suspend fun login(username: String, pass: String): LoginResult = withContext(Dispatchers.IO) {
         try {
-            val initRequest = Request.Builder().url("https://selfcare.bijoy.net/customer/").build()
-            client.newCall(initRequest).execute().close()
+            // 1. Visit main page
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/").build()).execute().close()
 
-            val formBody = FormBody.Builder().add("USERNAME", username).add("PASS", pass).build()
-            val loginRequest = Request.Builder()
+            // 2. Perform Login
+            val form = FormBody.Builder().add("USERNAME", username).add("PASS", pass).build()
+            val loginReq = Request.Builder()
                 .url("https://selfcare.bijoy.net/customer/login")
-                .post(formBody)
+                .post(form)
                 .header("Referer", "https://selfcare.bijoy.net/customer/")
-                .header("Origin", "https://selfcare.bijoy.net")
-                .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
+            client.newCall(loginReq).execute().close()
 
-            client.newCall(loginRequest).execute().close()
+            // 3. Get Dashboard
+            val dashReq = Request.Builder().url("https://selfcare.bijoy.net/customer/dashboard").build()
+            val response = client.newCall(dashReq).execute()
+            val body = response.body?.string() ?: ""
+            val url = response.request.url.toString()
+            response.close()
 
-            val dashboardRequest = Request.Builder().url("https://selfcare.bijoy.net/customer/dashboard").build()
-            val dashResponse = client.newCall(dashboardRequest).execute()
-            val dashBody = dashResponse.body?.string() ?: ""
-            val dashUrl = dashResponse.request.url.toString()
-            dashResponse.close()
+            if (url.contains("/login") || body.contains("Sign in")) return@withContext LoginResult.Error("Invalid Credentials")
 
-            if (dashUrl.contains("/login") || dashBody.contains("Sign in")) {
-                return@withContext LoginResult.Error("Login failed")
-            }
-
-            val doc = Jsoup.parse(dashBody)
+            val doc = Jsoup.parse(body)
             
-            // Fixed extraction logic - avoid sidebar by targeting content area
-            val mainContent = doc.select("main#content, main")
+            // Name: Specifically from the h2 in the user info section
+            val name = doc.select("h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             
-            val name = doc.select("aside h2").firstOrNull()?.ownText()?.trim() ?: "User"
+            // Package: Inside the span with Mbps
             val pkg = doc.select("span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
             
-            // Targeted selectors for status cards
-            val accStatus = doc.select("span:contains(Account Status)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
-            val connStatus = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.select("span")?.firstOrNull()?.text()?.trim() ?: "N/A"
-            val expiry = doc.select("span:contains(Expiry Date)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
-            val rate = doc.select("span:contains(Plan rate)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            // Extract using specific labels
+            fun getVal(label: String): String {
+                return doc.select("span:contains($label)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            }
+
+            val accStatusRaw = getVal("Account Status")
+            val accStatus = if (accStatusRaw.contains("Active", true)) "Active" else accStatusRaw
+            
+            val connStatusRaw = doc.select("span:contains(Connection Status)").firstOrNull()?.parent()?.select("p")?.firstOrNull()?.text()?.trim() ?: "N/A"
+            val connStatus = if (connStatusRaw.contains("ONLINE", true)) "ONLINE" else if (connStatusRaw.contains("OFFLINE", true)) "OFFLINE" else connStatusRaw
+            
+            val expiry = getVal("Expiry Date")
+            val rate = getVal("Plan rate")
 
             return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate))
         } catch (e: Exception) {
-            return@withContext LoginResult.Error(e.message ?: "Error")
+            return@withContext LoginResult.Error(e.message ?: "Network Error")
         }
     }
 
-    // New persistent flow for speed
     fun getSpeedFlow(): Flow<LiveSpeed> = flow {
+        // Initialize speed session
         try {
-            // 1. Initialize speed session
-            val initRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/du_graph_ajax?type=2")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .build()
-            client.newCall(initRequest).execute().close()
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/du_graph_ajax?type=2").build()).execute().close()
+        } catch (e: Exception) {}
 
-            // 2. Open long-lived stream
-            val speedRequest = Request.Builder()
-                .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("Referer", "https://selfcare.bijoy.net/customer/dashboard")
-                .build()
+        val speedClient = client.newBuilder().readTimeout(0, TimeUnit.SECONDS).build()
+        val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
+        
+        while (true) {
+            try {
+                val request = Request.Builder()
+                    .url("https://selfcare.bijoy.net/du_graph_ajax?type=1")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("Referer", "https://selfcare.bijoy.net/customer/report")
+                    .build()
 
-            val speedClient = client.newBuilder()
-                .readTimeout(0, TimeUnit.SECONDS) // Endless read
-                .build()
-
-            speedClient.newCall(speedRequest).execute().use { response ->
-                val source = response.body?.source() ?: return@flow
-                var lastPos = 0L
-                val regex = Regex("""(\d+\.?\d*),(\d+\.?\d*)""")
-
-                while (!source.exhausted()) {
-                    val currentData = source.buffer.clone().readUtf8()
-                    val newChunk = if (currentData.length > lastPos) currentData.substring(lastPos.toInt()) else ""
+                speedClient.newCall(request).execute().use { response ->
+                    val source = response.body?.source() ?: return@use
                     
-                    if (newChunk.isNotEmpty()) {
-                        lastPos = currentData.length.toLong()
-                        val matches = regex.findAll(newChunk).toList()
-                        if (matches.isNotEmpty()) {
-                            val last = matches.last()
-                            emit(LiveSpeed(
-                                download = last.groupValues[1].toDouble() / 1000.0,
-                                upload = last.groupValues[2].toDouble() / 1000.0
-                            ))
+                    // We read chunks from the stream
+                    while (!source.exhausted()) {
+                        // Read available data from the stream
+                        val fullBuffer = source.buffer.readUtf8()
+                        if (fullBuffer.isNotEmpty()) {
+                            val matches = regex.findAll(fullBuffer).toList()
+                            if (matches.isNotEmpty()) {
+                                val last = matches.last()
+                                emit(LiveSpeed(
+                                    download = last.groupValues[1].toDouble() / 1000.0,
+                                    upload = last.groupValues[2].toDouble() / 1000.0
+                                ))
+                            }
                         }
+                        delay(2000)
+                        source.request(1) // Wait for data
                     }
-                    delay(1000) // Don't burn CPU checking buffer
-                    source.request(1) // Wait for at least one more byte
                 }
+            } catch (e: Exception) {
+                Log.e("BijoyApi", "Stream error, retrying...", e)
+                delay(5000)
             }
-        } catch (e: Exception) {
-            Log.e("BijoyApi", "Speed flow error", e)
         }
     }.flowOn(Dispatchers.IO)
 
     suspend fun getUsageGraph(): List<UsageData> = withContext(Dispatchers.IO) {
         try {
             val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/totalUsage").header("X-Requested-With", "XMLHttpRequest").build()).execute()
-            val jsonObject = JSONObject(response.body?.string() ?: "")
+            val json = JSONObject(response.body?.string() ?: "")
             response.close()
-            val valuesArray = jsonObject.getJSONArray("value")
-            val usageList = ArrayList<UsageData>()
-            for (i in 0 until valuesArray.length()) {
-                val innerObj = JSONObject(valuesArray.getString(i))
-                usageList.add(UsageData(innerObj.getString("date"), innerObj.getLong("download"), innerObj.getLong("upload")))
+            val array = json.getJSONArray("value")
+            (0 until array.length()).map { i ->
+                val obj = JSONObject(array.getString(i))
+                UsageData(obj.getString("date"), obj.getLong("download"), obj.getLong("upload"))
             }
-            usageList
         } catch (e: Exception) { emptyList() }
     }
 
@@ -195,7 +188,7 @@ class BijoyApi {
             response.close()
             doc.select("table tbody tr").map { row ->
                 val cols = row.select("td")
-                PaymentHistoryItem(cols[0].text(), cols[1].text(), cols[2].text(), cols[3].text(), if(cols.size > 4) cols[4].text() else "")
+                PaymentHistoryItem(cols[0].text(), cols[1].text(), cols[2].text(), cols[3].text())
             }
         } catch (e: Exception) { emptyList() }
     }
