@@ -24,7 +24,10 @@ data class DashboardData(
     val accountStatus: String,
     val connectionStatus: String,
     val expiryDate: String,
-    val planRate: String
+    val planRate: String,
+    val email: String,
+    val mobile: String,
+    val userId: String
 )
 
 data class UsageData(
@@ -43,6 +46,15 @@ data class PaymentHistoryItem(
     val amount: String,
     val method: String,
     val status: String
+)
+
+data class TicketItem(
+    val id: String,
+    val status: String,
+    val title: String,
+    val description: String,
+    val date: String,
+    val assignedTo: String
 )
 
 sealed class LoginResult {
@@ -99,10 +111,6 @@ class BijoyApi {
                 return@withContext LoginResult.Error("Login failed")
             }
 
-            // Initialize graph session
-            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/report").header("User-Agent", userAgent).build()).execute().close()
-            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/du_graph_ajax?type=2").header("User-Agent", userAgent).header("X-Requested-With", "XMLHttpRequest").build()).execute().close()
-
             val doc = Jsoup.parse(dashBody)
             val name = doc.select("aside h2.flex.items-center").firstOrNull()?.ownText()?.trim() ?: "User"
             val pkg = doc.select("h1 span:contains(Mbps)").firstOrNull()?.text()?.trim() ?: "N/A"
@@ -119,13 +127,25 @@ class BijoyApi {
             val expiry = getCardValue("Expiry Date")
             val rate = getCardValue("Plan rate")
 
-            return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate))
+            val email = doc.select("aside p.text-sm").firstOrNull()?.text()?.trim() ?: ""
+            val userId = doc.select("p:contains(User Name) + span").firstOrNull()?.text()?.trim() ?: username
+            val mobile = doc.select("p:contains(Mobile) + span").firstOrNull()?.text()?.trim() ?: ""
+
+            return@withContext LoginResult.Success(DashboardData(name, pkg, accStatus, connStatus, expiry, rate, email, mobile, userId))
         } catch (e: Exception) {
             return@withContext LoginResult.Error(e.message ?: "Error")
         }
     }
 
     fun getSpeedFlow(): Flow<LiveSpeed> = flow {
+        // Initialize graph session lazily
+        try {
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/report").header("User-Agent", userAgent).build()).execute().close()
+            client.newCall(Request.Builder().url("https://selfcare.bijoy.net/du_graph_ajax?type=2").header("User-Agent", userAgent).header("X-Requested-With", "XMLHttpRequest").build()).execute().close()
+        } catch (e: Exception) {
+            Log.e("BijoyApi", "Failed to initialize graph session", e)
+        }
+
         val speedClient = client.newBuilder()
             .readTimeout(0, TimeUnit.SECONDS)
             .build()
@@ -192,9 +212,32 @@ class BijoyApi {
             val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/customerhistory").header("User-Agent", userAgent).build()).execute()
             val doc = Jsoup.parse(response.body?.string() ?: "")
             response.close()
-            doc.select("table tbody tr").map { row ->
+            doc.select("table tbody tr").mapNotNull { row ->
                 val cols = row.select("td")
-                PaymentHistoryItem(cols[0].text(), cols[1].text(), cols[2].text(), cols[3].text())
+                if (cols.size >= 4) {
+                    PaymentHistoryItem(cols[0].text().trim(), cols[1].text().trim(), cols[2].text().trim(), cols[3].text().trim())
+                } else null
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getTickets(): List<TicketItem> = withContext(Dispatchers.IO) {
+        try {
+            val response = client.newCall(Request.Builder().url("https://selfcare.bijoy.net/customer/complainlist").header("User-Agent", userAgent).build()).execute()
+            val doc = Jsoup.parse(response.body?.string() ?: "")
+            response.close()
+            doc.select("table tbody tr").mapNotNull { row ->
+                val cols = row.select("td")
+                if (cols.size >= 5) {
+                    TicketItem(
+                        id = cols[0].text().trim(),
+                        status = cols[1].text().trim(),
+                        title = cols[2].text().trim(),
+                        description = cols[3].text().trim(),
+                        date = cols[4].text().trim(),
+                        assignedTo = if (cols.size > 5) cols[5].text().trim() else ""
+                    )
+                } else null
             }
         } catch (e: Exception) { emptyList() }
     }

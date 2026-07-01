@@ -17,22 +17,40 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFD0BCFF),
-    secondary = Color(0xFFCCC2DC),
-    tertiary = Color(0xFFEFB8C8)
+    primary = Color(0xFF7F89FF),
+    onPrimary = Color(0xFF000000),
+    secondary = Color(0xFF8E97A6),
+    onSecondary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF00E676),
+    background = Color(0xFF0A0C16),
+    onBackground = Color(0xFFE2E4F0),
+    surface = Color(0xFF121424),
+    onSurface = Color(0xFFECEFFC),
+    surfaceVariant = Color(0xFF1E213A),
+    onSurfaceVariant = Color(0xFFBAC6CD),
+    error = Color(0xFFFF5252)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF6650a4),
-    secondary = Color(0xFF625b71),
-    tertiary = Color(0xFF7D5260)
+    primary = Color(0xFF4A56E2),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF6F778B),
+    onSecondary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF00C853),
+    background = Color(0xFFF5F7FA),
+    onBackground = Color(0xFF172935),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF172935),
+    surfaceVariant = Color(0xFFE8ECEF),
+    onSurfaceVariant = Color(0xFF7D878E),
+    error = Color(0xFFD32F2F)
 )
 
 @Composable
 fun BijoySelfCareTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -47,8 +65,8 @@ fun BijoySelfCareTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            window.statusBarColor = colorScheme.background.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
