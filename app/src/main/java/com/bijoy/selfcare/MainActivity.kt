@@ -265,8 +265,8 @@ fun MainScreen(appState: AppState, username: String, password: String, onLogout:
 
 @Composable
 fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSuccess: (DashboardData, String, String) -> Unit) {
-    var username by remember { mutableStateOf(if(initialU.isEmpty()) "840135" else initialU) }
-    var password by remember { mutableStateOf(if(initialP.isEmpty()) "6666" else initialP) }
+    var username by remember { mutableStateOf(initialU) }
+    var password by remember { mutableStateOf(initialP) }
     var status by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -276,7 +276,11 @@ fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSucces
             isLoading = true
             val result = api.login(initialU, initialP)
             isLoading = false
-            if (result is LoginResult.Success) onLoginSuccess(result.data, initialU, initialP)
+            if (result is LoginResult.Success) {
+                onLoginSuccess(result.data, initialU, initialP)
+            } else if (result is LoginResult.Error) {
+                status = result.message
+            }
         }
     }
 

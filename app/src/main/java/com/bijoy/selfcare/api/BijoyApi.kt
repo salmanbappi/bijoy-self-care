@@ -215,7 +215,22 @@ class BijoyApi {
             doc.select("table tbody tr").mapNotNull { row ->
                 val cols = row.select("td")
                 if (cols.size >= 4) {
-                    PaymentHistoryItem(cols[0].text().trim(), cols[1].text().trim(), cols[2].text().trim(), cols[3].text().trim())
+                    val date = cols[0].text().trim()
+                    val billAmt = cols[1].text().trim()
+                    val recvAmt = cols[2].text().trim()
+                    val remarks = cols[3].text().trim()
+                    
+                    val amount = if (recvAmt != "0" && recvAmt.isNotEmpty()) recvAmt else billAmt
+                    val method = when {
+                        remarks.contains("bkash", ignoreCase = true) -> "bKash"
+                        remarks.contains("nagad", ignoreCase = true) -> "Nagad"
+                        remarks.contains("rocket", ignoreCase = true) -> "Rocket"
+                        remarks.contains("upay", ignoreCase = true) -> "Upay"
+                        remarks.contains("visa", ignoreCase = true) || remarks.contains("master", ignoreCase = true) -> "Card"
+                        remarks.contains("cash", ignoreCase = true) -> "Cash"
+                        else -> "System"
+                    }
+                    PaymentHistoryItem(date, amount, method, remarks)
                 } else null
             }
         } catch (e: Exception) { emptyList() }
