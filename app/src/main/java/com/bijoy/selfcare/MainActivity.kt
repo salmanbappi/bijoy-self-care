@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.romainguy.kotlin.math.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -624,8 +625,35 @@ fun RealTimeChart(history: List<LiveSpeed>) {
                 downPath.moveTo(x, dy)
                 upPath.moveTo(x, uy)
             } else {
-                downPath.lineTo(x, dy)
-                upPath.lineTo(x, uy)
+                val prevS = history[i - 1]
+                val prevX = (i - 1) * stepX
+                val prevDy = size.height - (prevS.download.toFloat() * scaleY)
+                val prevUy = size.height - (prevS.upload.toFloat() * scaleY)
+
+                val p0X = if (i > 1) (i - 2) * stepX else prevX
+                val p0Dy = if (i > 1) size.height - (history[i - 2].download.toFloat() * scaleY) else prevDy
+                val p0Uy = if (i > 1) size.height - (history[i - 2].upload.toFloat() * scaleY) else prevUy
+
+                val p3X = if (i < history.size - 1) (i + 1) * stepX else x
+                val p3Dy = if (i < history.size - 1) size.height - (history[i + 1].download.toFloat() * scaleY) else dy
+                val p3Uy = if (i < history.size - 1) size.height - (history[i + 1].upload.toFloat() * scaleY) else uy
+
+                val tension = 0.2f
+                val cp1X = prevX + (x - p0X) * tension
+                val cp1Dy = prevDy + (dy - p0Dy) * tension
+                val cp1Uy = prevUy + (uy - p0Uy) * tension
+
+                val cp2X = x - (p3X - prevX) * tension
+                val cp2Dy = dy - (p3Dy - prevDy) * tension
+                val cp2Uy = uy - (p3Uy - prevUy) * tension
+
+                val cp1D = Float2(cp1X, cp1Dy)
+                val cp2D = Float2(cp2X, cp2Dy)
+                val cp1U = Float2(cp1X, cp1Uy)
+                val cp2U = Float2(cp2X, cp2Uy)
+
+                downPath.cubicTo(cp1D.x, cp1D.y, cp2D.x, cp2D.y, x, dy)
+                upPath.cubicTo(cp1U.x, cp1U.y, cp2U.x, cp2U.y, x, uy)
             }
         }
         

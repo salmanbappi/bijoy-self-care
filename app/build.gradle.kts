@@ -11,8 +11,8 @@ android {
         applicationId = "com.bijoy.selfcare"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     
+    implementation("dev.romainguy:kotlin-math:1.5.3")
     // Icons
     implementation(libs.androidx.material.icons.extended)
 
