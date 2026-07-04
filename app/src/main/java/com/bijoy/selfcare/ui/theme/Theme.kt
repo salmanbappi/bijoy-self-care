@@ -162,7 +162,6 @@ private val LightColorScheme = lightColorScheme(
     error = Color(0xFFD71921),
     onError = Color(0xFFFFFFFF)
 )
-)
 
 @Composable
 fun BijoySelfCareTheme(
