@@ -177,45 +177,55 @@ fun MainScreen(appState: AppState, username: String, password: String, onLogout:
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp
-            ) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-                
-                val items = listOf(
-                    Triple("dashboard", "Home", Icons.Filled.Home),
-                    Triple("usage", "Usage", Icons.Filled.BarChart),
-                    Triple("tickets", "Tickets", Icons.Filled.ConfirmationNumber),
-                    Triple("payment", "Bills", Icons.Filled.ReceiptLong),
-                    Triple("settings", "Settings", Icons.Filled.Settings)
-                )
-
-                items.forEach { (route, label, icon) ->
-                    NavigationBarItem(
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontWeight = FontWeight.Medium) },
-                        selected = currentRoute == route,
-                        onClick = {
-                            if (currentRoute != route) {
-                                navController.navigate(route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                            unselectedTextColor = MaterialTheme.colorScheme.secondary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                        )
+            Column {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.height(64.dp)
+                ) {
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
+                    
+                    val items = listOf(
+                        Triple("dashboard", "Home", Icons.Filled.Home),
+                        Triple("usage", "Usage", Icons.Filled.BarChart),
+                        Triple("tickets", "Tickets", Icons.Filled.ConfirmationNumber),
+                        Triple("payment", "Bills", Icons.Filled.ReceiptLong),
+                        Triple("settings", "Settings", Icons.Filled.Settings)
                     )
+
+                    items.forEach { (route, label, icon) ->
+                        val selected = currentRoute == route
+                        NavigationBarItem(
+                            icon = { Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp)) },
+                            label = { 
+                                Text(
+                                    text = if (selected) "[ ${label.uppercase()} ]" else label.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall
+                                ) 
+                            },
+                            selected = selected,
+                            onClick = {
+                                if (currentRoute != route) {
+                                    navController.navigate(route) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                unselectedTextColor = MaterialTheme.colorScheme.secondary,
+                                indicatorColor = Color.Transparent
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -228,18 +238,18 @@ fun MainScreen(appState: AppState, username: String, password: String, onLogout:
                 val initialIndex = getTabRouteIndex(initialState.destination.route)
                 val targetIndex = getTabRouteIndex(targetState.destination.route)
                 if (targetIndex > initialIndex) {
-                    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300))
+                    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(250, easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))) + fadeIn(animationSpec = tween(200))
                 } else {
-                    slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300))
+                    slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(250, easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))) + fadeIn(animationSpec = tween(200))
                 }
             },
             exitTransition = {
                 val initialIndex = getTabRouteIndex(initialState.destination.route)
                 val targetIndex = getTabRouteIndex(targetState.destination.route)
                 if (targetIndex > initialIndex) {
-                    slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(300))
+                    slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(250, easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))) + fadeOut(animationSpec = tween(200))
                 } else {
-                    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(300))
+                    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(250, easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))) + fadeOut(animationSpec = tween(200))
                 }
             }
         ) {
@@ -288,55 +298,73 @@ fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSucces
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
-            .padding(28.dp),
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
-        Card(
-            modifier = Modifier.size(80.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
         ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Wifi, null, tint = Color.White, modifier = Modifier.size(44.dp))
-            }
+            Icon(
+                imageVector = Icons.Filled.Wifi, 
+                contentDescription = null, 
+                tint = MaterialTheme.colorScheme.primary, 
+                modifier = Modifier.size(36.dp)
+            )
         }
         
-        Spacer(Modifier.height(24.dp))
-        Text("Bijoy Self Care", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onBackground)
-        Text("Manage your broadband connection seamlessly", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.height(32.dp))
+        Text(
+            text = "bijoy self care", 
+            style = MaterialTheme.typography.headlineLarge, 
+            fontWeight = FontWeight.Bold, 
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Manage your broadband connection seamlessly", 
+            style = MaterialTheme.typography.bodySmall, 
+            color = MaterialTheme.colorScheme.secondary
+        )
         
         Spacer(Modifier.height(48.dp))
         
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Customer ID") },
-            leadingIcon = { Icon(Icons.Filled.Person, null) },
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(Modifier.height(16.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            leadingIcon = { Icon(Icons.Filled.Lock, null) },
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text("CUSTOMER ID", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                placeholder = { Text("Enter ID", color = MaterialTheme.colorScheme.secondary) },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelLarge
+            )
+        }
         
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
+        
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text("PASSWORD", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = { Text("Enter Password", color = MaterialTheme.colorScheme.secondary) },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.labelLarge
+            )
+        }
+        
+        Spacer(Modifier.height(40.dp))
         
         Button(
             onClick = {
@@ -351,21 +379,31 @@ fun LoginScreen(api: BijoyApi, initialU: String, initialP: String, onLoginSucces
                     }
                 }
             },
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(999.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            enabled = !isLoading
+                .height(48.dp),
+            enabled = !isLoading,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                Text("[LOADING...]", style = MaterialTheme.typography.labelLarge)
             } else {
-                Text("LOGIN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("LOGIN", style = MaterialTheme.typography.labelLarge)
             }
         }
         
         if (status.isNotEmpty()) {
-            Text(status, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "[ERROR: ${status.uppercase()}]", 
+                color = MaterialTheme.colorScheme.error, 
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -384,7 +422,7 @@ fun PulsingDot(color: Color, modifier: Modifier = Modifier) {
     )
     Box(
         modifier = modifier
-            .size(10.dp)
+            .size(8.dp)
             .clip(CircleShape)
             .background(color.copy(alpha = alpha))
     )
@@ -409,40 +447,32 @@ fun DashboardScreen(appState: AppState, onRefresh: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.tertiary
-                                    )
-                                )
-                            ),
+                            .size(48.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            data.name.firstOrNull()?.toString()?.uppercase() ?: "U",
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp
+                            text = data.name.firstOrNull()?.toString()?.uppercase() ?: "U",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Hello,", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                        Text(data.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("HELLO,", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Text(data.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     }
                 }
                 
                 IconButton(
                     onClick = onRefresh,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                    modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                 ) {
                     if (appState.isDashboardRefreshing) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text("[...]", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     } else {
-                        Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -455,37 +485,36 @@ fun DashboardScreen(appState: AppState, onRefresh: () -> Unit) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                )
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("Account Status", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                        Text(data.accountStatus, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("ACCOUNT STATUS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Spacer(Modifier.height(4.dp))
+                        Text(data.accountStatus, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     }
                     val isOnline = data.connectionStatus.contains("ONLINE", true)
+                    val statusColor = if (isOnline) Color(0xFF4A9E5C) else Color(0xFFD71921)
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isOnline) Color(0xFF00C853).copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.15f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .border(1.dp, statusColor, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        PulsingDot(color = if (isOnline) Color(0xFF00C853) else Color.Red)
-                        Spacer(Modifier.width(8.dp))
+                        PulsingDot(color = statusColor)
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            data.connectionStatus,
-                            color = if (isOnline) Color(0xFF00C853) else Color.Red,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            text = data.connectionStatus.uppercase(),
+                            color = statusColor,
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
@@ -508,31 +537,39 @@ fun DashboardScreen(appState: AppState, onRefresh: () -> Unit) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("Personal Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Column(Modifier.padding(16.dp)) {
+                    Text("PERSONAL INFORMATION", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
                     Spacer(Modifier.height(16.dp))
                     
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Phone, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Filled.Phone, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("Mobile", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                            Text(if (data.mobile.isEmpty()) "Not Provided" else data.mobile, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text("MOBILE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(
+                                text = if (data.mobile.isEmpty()) "Not Provided" else data.mobile, 
+                                style = MaterialTheme.typography.bodyMedium, 
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                     
                     Spacer(Modifier.height(16.dp))
                     
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Email, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Filled.Email, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("Email", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                            Text(if (data.email.isEmpty()) "Not Provided" else data.email, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text("EMAIL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(
+                                text = if (data.email.isEmpty()) "Not Provided" else data.email, 
+                                style = MaterialTheme.typography.bodyMedium, 
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -556,17 +593,18 @@ fun LiveSpeedCard(api: BijoyApi) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Real-Time Bandwidth", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("REAL-TIME BANDWIDTH", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SpeedDisplay("Download", speed.download, Color(0xFF00C853))
-                SpeedDisplay("Upload", speed.upload, Color(0xFF2196F3))
+                SpeedDisplay("Download", speed.download, Color(0xFF4A9E5C))
+                SpeedDisplay("Upload", speed.upload, MaterialTheme.colorScheme.secondary)
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             RealTimeChart(history)
         }
     }
@@ -575,26 +613,43 @@ fun LiveSpeedCard(api: BijoyApi) {
 @Composable
 fun SpeedDisplay(label: String, kbpsValue: Double, color: Color) {
     var value = kbpsValue
-    var unit = "Kbps"
+    var unit = "KBPS"
     
     if (value >= 1000.0) {
         value /= 1000.0
-        unit = "Mbps"
+        unit = "MBPS"
     }
 
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+            Box(Modifier.size(6.dp).clip(CircleShape).background(color))
             Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
         }
-        Text(String.format(Locale.US, "%.1f", value), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-        Text(unit, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = String.format(Locale.US, "%.1f", value), 
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = unit, 
+                style = MaterialTheme.typography.labelSmall, 
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
     }
 }
 
 @Composable
 fun RealTimeChart(history: List<LiveSpeed>) {
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val downloadColor = Color(0xFF4A9E5C)
+    val uploadColor = MaterialTheme.colorScheme.secondary
+    
     Canvas(Modifier.fillMaxWidth().height(100.dp)) {
         if (history.size < 2) return@Canvas
         
@@ -603,10 +658,10 @@ fun RealTimeChart(history: List<LiveSpeed>) {
         val hGridSpacing = size.height / hGridLines
         for (i in 0..hGridLines) {
             drawLine(
-                color = Color.Gray.copy(alpha = 0.12f),
+                color = outlineColor,
                 start = Offset(0f, i * hGridSpacing),
                 end = Offset(size.width, i * hGridSpacing),
-                strokeWidth = 1.dp.toPx()
+                strokeWidth = 0.5.dp.toPx()
             )
         }
 
@@ -657,36 +712,22 @@ fun RealTimeChart(history: List<LiveSpeed>) {
             }
         }
         
-        // Draw area fill
-        val downFillPath = Path().apply {
-            addPath(downPath)
-            lineTo((history.size - 1) * stepX, size.height)
-            lineTo(0f, size.height)
-            close()
-        }
+        // Draw outline stroke (No area fill, clean solid/dashed lines)
         drawPath(
-            downFillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(Color(0xFF00C853).copy(alpha = 0.2f), Color.Transparent)
-            )
+            path = downPath, 
+            color = downloadColor, 
+            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
         )
         
-        val upFillPath = Path().apply {
-            addPath(upPath)
-            lineTo((history.size - 1) * stepX, size.height)
-            lineTo(0f, size.height)
-            close()
-        }
         drawPath(
-            upFillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(Color(0xFF2196F3).copy(alpha = 0.2f), Color.Transparent)
+            path = upPath, 
+            color = uploadColor, 
+            style = Stroke(
+                width = 2.dp.toPx(), 
+                cap = StrokeCap.Round,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
             )
         )
-
-        // Draw outline stroke
-        drawPath(downPath, Color(0xFF00C853), style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
-        drawPath(upPath, Color(0xFF2196F3), style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
     }
 }
 
@@ -694,13 +735,14 @@ fun RealTimeChart(history: List<LiveSpeed>) {
 fun InfoCardCompact(label: String, value: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(8.dp))
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -719,15 +761,15 @@ fun UsageScreen(appState: AppState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Usage Reports", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("usage reports", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             IconButton(
                 onClick = { scope.launch { appState.loadUsage(force = true) } },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             ) {
                 if (appState.isUsageLoading) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("[...]", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -736,62 +778,64 @@ fun UsageScreen(appState: AppState) {
 
         if (appState.isUsageLoading && appState.usageData.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                Text("[LOADING...]", style = MaterialTheme.typography.labelLarge)
             }
         } else if (appState.usageError.isNotEmpty() && appState.usageData.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(appState.usageError, color = MaterialTheme.colorScheme.error)
+                Text("[ERROR: ${appState.usageError.uppercase()}]", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
             }
         } else {
             // Stats summary
             val totalBytes = appState.usageData.sumOf { it.download + it.upload }
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Total Consumption (Active Period)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                    Text(formatBytes(totalBytes), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                    Text("TOTAL CONSUMPTION (ACTIVE PERIOD)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(formatBytes(totalBytes), style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(appState.usageData) { item ->
                     Card(
                         Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(item.date, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                                Text("Total: ${formatBytes(item.download + item.upload)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(item.date.uppercase(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("TOTAL: ${formatBytes(item.download + item.upload)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
                             
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(12.dp))
                             
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Down: ${formatBytes(item.download)}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF00C853))
-                                Text("Up: ${formatBytes(item.upload)}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2196F3))
+                                Text("DOWN: ${formatBytes(item.download)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                Text("UP: ${formatBytes(item.upload)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                             }
                             
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
                             
-                            // Visual ratio indicator
+                            // Visual ratio indicator (monochrome progress bar)
                             val downRatio = if (item.download + item.upload > 0) item.download.toFloat() / (item.download + item.upload) else 0.5f
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(4.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF2196F3))
+                                    .height(6.dp)
+                                    .background(MaterialTheme.colorScheme.outlineVariant)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .fillMaxWidth(downRatio)
-                                        .background(Color(0xFF00C853))
+                                        .background(MaterialTheme.colorScheme.primary)
                                 )
                             }
                         }
@@ -816,15 +860,15 @@ fun TicketsScreen(appState: AppState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Complain Tickets", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("complain tickets", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             IconButton(
                 onClick = { scope.launch { appState.loadTickets(force = true) } },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             ) {
                 if (appState.isTicketsLoading) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("[...]", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -833,15 +877,15 @@ fun TicketsScreen(appState: AppState) {
 
         if (appState.isTicketsLoading && appState.tickets.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                Text("[LOADING...]", style = MaterialTheme.typography.labelLarge)
             }
         } else if (appState.ticketsError.isNotEmpty() && appState.tickets.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(appState.ticketsError, color = MaterialTheme.colorScheme.error)
+                Text("[ERROR: ${appState.ticketsError.uppercase()}]", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
             }
         } else if (appState.tickets.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No complain tickets found", color = MaterialTheme.colorScheme.secondary)
+                Text("NO COMPLAIN TICKETS FOUND", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -858,64 +902,63 @@ fun TicketCardItem(item: TicketItem) {
     var expanded by remember { mutableStateOf(false) }
     
     val statusColor = when (item.status.uppercase()) {
-        "NEW" -> Color(0xFFFF9100)
-        "ASSIGNED" -> Color(0xFF2979FF)
-        "CLOSED", "RESOLVED" -> Color(0xFF00C853)
-        else -> Color.Gray
+        "NEW" -> Color(0xFFD4A843) // Warning amber
+        "ASSIGNED" -> Color(0xFF5B9BF6) // Interactive blue
+        "CLOSED", "RESOLVED" -> Color(0xFF4A9E5C) // Success green
+        else -> MaterialTheme.colorScheme.secondary
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("#${item.id}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("#${item.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(item.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(12.dp))
+                    Text(item.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
                 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(statusColor.copy(alpha = 0.15f))
+                        .border(1.dp, statusColor, RoundedCornerShape(4.dp))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text(item.status, color = statusColor, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                    Text(item.status.uppercase(), color = statusColor, style = MaterialTheme.typography.labelSmall)
                 }
             }
             
-            Spacer(Modifier.height(10.dp))
-            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            Text(item.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             
             if (item.assignedTo.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text("Assigned To: ${item.assignedTo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.height(6.dp))
+                Text("ASSIGNED TO: ${item.assignedTo.uppercase()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             }
             
             AnimatedVisibility(visible = expanded) {
                 Column {
                     Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(Modifier.height(12.dp))
-                    Text("Description:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(4.dp))
-                    Text(item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("DESCRIPTION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.height(6.dp))
+                    Text(item.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
             
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
@@ -949,15 +992,15 @@ fun PaymentScreen(appState: AppState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Billing History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("billing history", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
             IconButton(
                 onClick = { scope.launch { appState.loadPayment(force = true) } },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
             ) {
                 if (appState.isPaymentLoading) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("[...]", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Filled.Refresh, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -966,33 +1009,34 @@ fun PaymentScreen(appState: AppState) {
 
         if (appState.isPaymentLoading && appState.paymentHistory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                Text("[LOADING...]", style = MaterialTheme.typography.labelLarge)
             }
         } else if (appState.paymentError.isNotEmpty() && appState.paymentHistory.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(appState.paymentError, color = MaterialTheme.colorScheme.error)
+                Text("[ERROR: ${appState.paymentError.uppercase()}]", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(appState.paymentHistory) { item ->
                     val isNegative = item.amount.toDoubleOrNull()?.let { it < 0 } ?: item.amount.startsWith("-")
                     val cleanAmount = item.amount.replace("-", "").trim()
-                    val trxId = extractTrxId(item.status) // status contains Remarks from site
-                    val paymentMethod = if (item.status.contains("BKASH", true)) "bKash" else item.method
+                    val trxId = extractTrxId(item.status)
+                    val paymentMethod = if (item.status.contains("BKASH", true)) "BKASH" else item.method.uppercase()
 
                     Card(
                         Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(item.date, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                                Text(item.date, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    if (isNegative) "- ৳ $cleanAmount" else "+ ৳ $cleanAmount",
-                                    color = if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF00C853),
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 18.sp
+                                    text = if (isNegative) "- ৳ $cleanAmount" else "+ ৳ $cleanAmount",
+                                    color = if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF4A9E5C),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontSize = 16.sp
                                 )
                             }
                             
@@ -1002,46 +1046,48 @@ fun PaymentScreen(appState: AppState) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         Modifier
-                                            .size(8.dp)
+                                            .size(6.dp)
                                             .clip(CircleShape)
-                                            .background(if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF00C853))
+                                            .background(if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF4A9E5C))
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        if (isNegative) "Charge / Bill" else "Recharge Received",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
+                                        text = if (isNegative) "CHARGE / BILL" else "RECHARGE RECEIVED",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary
                                     )
                                 }
                                 
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
-                                    Text(paymentMethod, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = paymentMethod, 
+                                        style = MaterialTheme.typography.labelSmall, 
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                             
                             Spacer(Modifier.height(6.dp))
-                            Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text(item.status.uppercase(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                             
                             if (trxId != null) {
-                                Spacer(Modifier.height(10.dp))
+                                Spacer(Modifier.height(12.dp))
                                 Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                                         .clickable { copyToClipboard(context, trxId) }
                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("TrxID: $trxId", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    Text("TRXID: $trxId", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                     Spacer(Modifier.width(8.dp))
-                                    Text("(Tap to Copy)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontSize = 9.sp)
+                                    Text("(TAP TO COPY)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
                         }
@@ -1061,29 +1107,29 @@ fun copyToClipboard(context: Context, text: String, label: String = "Transaction
 
 @Composable
 fun SettingsScreen(appState: AppState, onLogout: () -> Unit) {
-    val context = LocalContext.current
-    val sharedPrefs = remember { context.getSharedPreferences("bijoy_prefs", Context.MODE_PRIVATE) }
     val data = appState.dashboardData
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
-            Column(Modifier.padding(20.dp)) {
-                Text("App Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
+            Column(Modifier.padding(16.dp)) {
+                Text("APP INFORMATION", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.height(16.dp))
                 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("App Version", color = MaterialTheme.colorScheme.secondary)
-                    Text("1.1.0", fontWeight = FontWeight.Bold)
+                    Text("APP VERSION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Text("1.2.0", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Platform Status", color = MaterialTheme.colorScheme.secondary)
-                    Text("Ready", color = Color(0xFF00C853), fontWeight = FontWeight.Bold)
+                    Text("PLATFORM STATUS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Text("READY", color = Color(0xFF4A9E5C), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1091,25 +1137,27 @@ fun SettingsScreen(appState: AppState, onLogout: () -> Unit) {
         if (data != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("Connection Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(12.dp))
+                Column(Modifier.padding(16.dp)) {
+                    Text("CONNECTION DETAILS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.height(16.dp))
                     
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Service Provider", color = MaterialTheme.colorScheme.secondary)
-                        Text("Bijoy Broadband", fontWeight = FontWeight.Bold)
+                        Text("SERVICE PROVIDER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Text("BIJOY BROADBAND", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Customer ID", color = MaterialTheme.colorScheme.secondary)
-                        Text(data.userId, fontWeight = FontWeight.Bold)
+                        Text("CUSTOMER ID", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Text(data.userId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Package Details", color = MaterialTheme.colorScheme.secondary)
-                        Text(data.packageInfo, fontWeight = FontWeight.Bold)
+                        Text("PACKAGE DETAILS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Text(data.packageInfo, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1117,17 +1165,18 @@ fun SettingsScreen(appState: AppState, onLogout: () -> Unit) {
         
         Spacer(Modifier.weight(1f))
         
-        Button(
+        OutlinedButton(
             onClick = onLogout,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            shape = RoundedCornerShape(12.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(999.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
         ) {
-            Icon(Icons.Filled.ExitToApp, null)
+            Icon(Icons.Filled.ExitToApp, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("LOGOUT FROM ACCOUNT", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("LOGOUT FROM ACCOUNT", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
